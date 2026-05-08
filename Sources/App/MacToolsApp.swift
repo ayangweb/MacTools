@@ -20,6 +20,8 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: MenuBarStatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppAppearancePreference.applyStoredPreference()
+
         let windowRouter = AppWindowRouter(pluginHost: pluginHost, appUpdater: appUpdater)
         self.windowRouter = windowRouter
         statusItemController = MenuBarStatusItemController(

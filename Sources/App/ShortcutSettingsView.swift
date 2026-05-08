@@ -82,26 +82,26 @@ struct ShortcutSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .fill(SettingsStyle.cardBackground)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
                 )
 
                 ShortcutSettingsRowsView(pluginHost: pluginHost, items: pluginHost.shortcutItems)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .fill(SettingsStyle.cardBackground)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
                 )
             }
             .padding(24)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(SettingsStyle.contentBackground)
     }
 }
 
@@ -221,7 +221,7 @@ private struct ShortcutSettingsRow: View {
 private struct ShortcutSettingsDivider: View {
     var body: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.08))
+            .fill(SettingsStyle.separator)
             .frame(height: 1)
             .padding(.horizontal, 18)
     }
@@ -238,7 +238,7 @@ private struct ShortcutStatusBadge: View {
             .padding(.vertical, 4)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.accentColor.opacity(0.12))
+                    .fill(SettingsStyle.activeControlBackground)
             )
     }
 }
@@ -286,11 +286,11 @@ private struct ShortcutActionGroup: View {
         .frame(maxWidth: .infinity, minHeight: ShortcutSettingsLayout.controlHeight)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .underPageBackgroundColor))
+                .fill(SettingsStyle.recessedControlBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
         )
     }
 }
@@ -298,7 +298,7 @@ private struct ShortcutActionGroup: View {
 private struct ShortcutActionDivider: View {
     var body: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.08))
+            .fill(SettingsStyle.separator)
             .frame(width: 1, height: 18)
             .padding(.vertical, 5)
     }
@@ -319,7 +319,7 @@ private struct ShortcutActionButton: View {
                 .frame(width: 32, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isActive ? tint.opacity(0.14) : Color.clear)
+                        .fill(isActive ? SettingsStyle.activeControlBackground : Color.clear)
                 )
         }
         .buttonStyle(.plain)
@@ -351,12 +351,12 @@ private struct ShortcutBindingBadge: View {
         .frame(maxWidth: .infinity, minHeight: ShortcutSettingsLayout.controlHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isRecording ? Color.accentColor.opacity(0.06) : Color(nsColor: .textBackgroundColor))
+                .fill(isRecording ? SettingsStyle.recordingBackground : SettingsStyle.fieldBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(
-                    isRecording ? Color.accentColor : Color.primary.opacity(0.12),
+                    isRecording ? Color.accentColor : SettingsStyle.cardBorder,
                     lineWidth: isRecording ? 1.5 : 1
                 )
         )
@@ -484,11 +484,11 @@ private struct ShortcutKeycap: View {
             .padding(.vertical, metrics.verticalPadding)
             .background(
                 RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor))
+                    .fill(SettingsStyle.keycapBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                    .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
             )
     }
 }

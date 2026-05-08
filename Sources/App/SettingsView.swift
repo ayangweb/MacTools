@@ -74,9 +74,16 @@ private struct PermissionSettingsRow: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
 
     var body: some View {
         Form {
+            Section {
+                AppearanceSettingsRow(selection: appearancePreferenceBinding)
+            } header: {
+                Text("外观")
+            }
+
             Section {
                 FeatureManagementTableView(
                     items: pluginHost.featureManagementItems,
@@ -101,6 +108,58 @@ struct GeneralSettingsView: View {
     private var featureManagementListHeight: CGFloat {
         FeatureManagementTableView.preferredHeight(for: pluginHost.featureManagementItems.count)
     }
+
+    private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
+        Binding {
+            AppAppearancePreference(rawValue: appearancePreferenceRawValue) ?? .system
+        } set: { preference in
+            appearancePreferenceRawValue = preference.rawValue
+            preference.apply()
+        }
+    }
+}
+
+private struct AppearanceSettingsRow: View {
+    @Binding var selection: AppAppearancePreference
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "circle.lefthalf.filled")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("应用外观")
+                    .font(.system(size: 13, weight: .semibold))
+
+                Text("自动跟随系统，也可以固定为深色或浅色。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Picker("外观", selection: $selection) {
+                ForEach(AppAppearancePreference.allCases) { preference in
+                    Text(preference.title)
+                        .tag(preference)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 220)
+        }
+        .frame(minHeight: 38)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .help("设置应用外观")
+    }
 }
 
 private struct PluginConfigurationSettingsView: View {
@@ -114,7 +173,9 @@ private struct PluginConfigurationSettingsView: View {
             )
             .frame(width: 210)
 
-            Divider()
+            Rectangle()
+                .fill(SettingsStyle.separator)
+                .frame(width: 1)
 
             PluginConfigurationDetailPane(
                 pluginHost: pluginHost,
@@ -122,7 +183,7 @@ private struct PluginConfigurationSettingsView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(SettingsStyle.windowBackground)
         .onAppear {
             pluginHost.refreshAll()
         }
@@ -164,13 +225,14 @@ private struct PluginConfigurationSidebar: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(SettingsStyle.sidebarBackground)
     }
 }
 
 private struct PluginConfigurationSidebarRow: View {
     let item: PluginConfigurationItem
     let isSelected: Bool
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -192,10 +254,19 @@ private struct PluginConfigurationSidebarRow: View {
         .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.clear)
+                .fill(rowBackground)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onHover { isHovered = $0 }
         .help(item.title)
+    }
+
+    private var rowBackground: Color {
+        if isSelected {
+            return SettingsStyle.sidebarSelectionBackground
+        }
+
+        return isHovered ? SettingsStyle.sidebarHoverBackground : .clear
     }
 }
 
@@ -235,6 +306,7 @@ private struct PluginConfigurationDetailPane: View {
                     .padding(24)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
+                .background(SettingsStyle.contentBackground)
             } else {
                 ContentUnavailableView(
                     "暂无可配置功能",
@@ -244,6 +316,7 @@ private struct PluginConfigurationDetailPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .background(SettingsStyle.contentBackground)
     }
 }
 
@@ -422,11 +495,11 @@ private struct PluginConfigurationSection<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .fill(SettingsStyle.cardBackground)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
                 )
         }
     }
@@ -435,7 +508,7 @@ private struct PluginConfigurationSection<Content: View>: View {
 private struct SettingsSectionDivider: View {
     var body: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.08))
+            .fill(SettingsStyle.separator)
             .frame(height: 1)
             .padding(.horizontal, 16)
     }
