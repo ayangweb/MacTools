@@ -11,6 +11,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let componentPopover = NSPopover()
     private let featureHostingController: NSHostingController<MenuBarContent>
     private let componentHostingController: NSHostingController<ComponentPanelContent>
+    private var appearanceObserver: NSObjectProtocol?
 
     init(
         pluginHost: PluginHost,
@@ -45,7 +46,17 @@ final class MenuBarPanelPresenter: NSObject {
 
         configure(featurePopover, contentViewController: featureHostingController)
         configure(componentPopover, contentViewController: componentHostingController)
+        observeAppearancePreference()
+        applyCurrentAppearance()
         prewarm()
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            if let appearanceObserver {
+                NotificationCenter.default.removeObserver(appearanceObserver)
+            }
+        }
     }
 
     var isAnyPanelShown: Bool {
@@ -79,6 +90,7 @@ final class MenuBarPanelPresenter: NSObject {
             panelHeight: panelHeight,
             onDismiss: onDismiss
         )
+        applyCurrentAppearance()
         componentPopover.contentSize = NSSize(
             width: ComponentPanelLayout.panelWidth,
             height: panelHeight
@@ -104,6 +116,7 @@ final class MenuBarPanelPresenter: NSObject {
         popover.animates = false
         popover.delegate = self
         popover.contentViewController = contentViewController
+        AppAppearancePreference.stored().apply(to: contentViewController.view)
     }
 
     private func prewarm() {
@@ -119,7 +132,9 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func show(_ popover: NSPopover, relativeTo button: NSStatusBarButton) {
+        applyCurrentAppearance()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        applyCurrentAppearance()
         focus(popover)
     }
 
@@ -135,6 +150,26 @@ final class MenuBarPanelPresenter: NSObject {
 
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    private func observeAppearancePreference() {
+        appearanceObserver = NotificationCenter.default.addObserver(
+            forName: AppAppearancePreference.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.applyCurrentAppearance()
+            }
+        }
+    }
+
+    private func applyCurrentAppearance() {
+        let preference = AppAppearancePreference.stored()
+        preference.apply(to: featureHostingController.view)
+        preference.apply(to: componentHostingController.view)
+        preference.apply(to: featurePopover)
+        preference.apply(to: componentPopover)
     }
 }
 

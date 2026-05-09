@@ -310,26 +310,15 @@ struct MenuBarContent: View {
     static let launchControlWindowID = "launch-control"
     static let launchControlOpenManagerActionID = LaunchControlPlugin.ControlID.openManager
 
-    private struct DeferredPanelSwitchAction {
-        let pluginID: String
-        let isOn: Bool
-    }
-
-    private struct DeferredActionInvocation {
-        let pluginID: String
-        let controlID: String
-    }
-
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
+    @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
 
     @ObservedObject var pluginHost: PluginHost
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
     let onPresentDiskCleanConfiguration: () -> Void
     let onPresentLaunchControlConfiguration: () -> Void
-    @State private var deferredPanelSwitchAction: DeferredPanelSwitchAction?
-    @State private var deferredActionInvocation: DeferredActionInvocation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MenuBarPanelLayout.rootSpacing) {
@@ -370,9 +359,11 @@ struct MenuBarContent: View {
         .onReceive(pluginHost.$settingsPresentationRequestCount.dropFirst()) { _ in
             presentSettings()
         }
+        .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
+            secondaryPanelController.applyCurrentAppearance()
+        }
         .onDisappear {
-            flushDeferredPanelSwitchActionIfNeeded()
-            flushDeferredActionInvocationIfNeeded()
+            flushDeferredActionsIfNeeded()
             hoverCoordinator.dismissImmediately()
             hoverCoordinator.onDismissRequest = nil
             secondaryPanelController.onHostWindowDismissRequest = nil
@@ -390,24 +381,13 @@ struct MenuBarContent: View {
         case .keepPresented:
             pluginHost.setSwitchValue(newValue, for: item.id)
         case .dismissBeforeHandling:
-            deferredPanelSwitchAction = DeferredPanelSwitchAction(
+            deferredActionDispatcher.deferPanelSwitch(
                 pluginID: item.id,
                 isOn: newValue
             )
             onDismiss()
+            flushDeferredActionsAfterDismiss()
         }
-    }
-
-    private func flushDeferredPanelSwitchActionIfNeeded() {
-        guard let deferredPanelSwitchAction else {
-            return
-        }
-
-        self.deferredPanelSwitchAction = nil
-        pluginHost.setSwitchValue(
-            deferredPanelSwitchAction.isOn,
-            for: deferredPanelSwitchAction.pluginID
-        )
     }
 
     private func handleActionInvoke(
@@ -432,34 +412,50 @@ struct MenuBarContent: View {
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
         case .dismissBeforeHandling:
             // 先收 popover 再执行，避免动作打开新窗口时菜单还浮在屏上挡视线。
-            deferredActionInvocation = DeferredActionInvocation(
+            deferredActionDispatcher.deferActionInvocation(
                 pluginID: item.id,
                 controlID: controlID
             )
             onDismiss()
+            flushDeferredActionsAfterDismiss()
         }
     }
 
-    private func flushDeferredActionInvocationIfNeeded() {
-        guard let deferred = deferredActionInvocation else {
-            return
-        }
+    private func flushDeferredActionsAfterDismiss() {
+        deferredActionDispatcher.flushAfterDismiss(
+            switchHandler: performDeferredPanelSwitchAction,
+            invocationHandler: performDeferredActionInvocation
+        )
+    }
 
-        self.deferredActionInvocation = nil
+    private func flushDeferredActionsIfNeeded() {
+        deferredActionDispatcher.flush(
+            switchHandler: performDeferredPanelSwitchAction,
+            invocationHandler: performDeferredActionInvocation
+        )
+    }
 
-        if isDiskCleanOpenDetailsAction(pluginID: deferred.pluginID, controlID: deferred.controlID) {
+    private func performDeferredPanelSwitchAction(_ action: DeferredPanelActionDispatcher.PanelSwitchAction) {
+        pluginHost.setSwitchValue(
+            action.isOn,
+            for: action.pluginID
+        )
+    }
+
+    private func performDeferredActionInvocation(_ action: DeferredPanelActionDispatcher.ActionInvocation) {
+        if isDiskCleanOpenDetailsAction(pluginID: action.pluginID, controlID: action.controlID) {
             presentDiskCleanDetails()
             return
         }
 
-        if isLaunchControlOpenManagerAction(pluginID: deferred.pluginID, controlID: deferred.controlID) {
+        if isLaunchControlOpenManagerAction(pluginID: action.pluginID, controlID: action.controlID) {
             presentLaunchControlManager()
             return
         }
 
         pluginHost.invokePanelAction(
-            controlID: deferred.controlID,
-            for: deferred.pluginID
+            controlID: action.controlID,
+            for: action.pluginID
         )
     }
 
@@ -638,6 +634,69 @@ struct MenuBarContent: View {
             .buttonStyle(.plain)
         }
         .frame(width: MenuBarPanelLayout.surfaceWidth, alignment: .leading)
+    }
+}
+
+@MainActor
+final class DeferredPanelActionDispatcher: ObservableObject {
+    struct PanelSwitchAction: Equatable {
+        let pluginID: String
+        let isOn: Bool
+    }
+
+    struct ActionInvocation: Equatable {
+        let pluginID: String
+        let controlID: String
+    }
+
+    private(set) var pendingPanelSwitchAction: PanelSwitchAction?
+    private(set) var pendingActionInvocation: ActionInvocation?
+    private var flushTask: Task<Void, Never>?
+
+    func deferPanelSwitch(pluginID: String, isOn: Bool) {
+        pendingPanelSwitchAction = PanelSwitchAction(pluginID: pluginID, isOn: isOn)
+    }
+
+    func deferActionInvocation(pluginID: String, controlID: String) {
+        pendingActionInvocation = ActionInvocation(pluginID: pluginID, controlID: controlID)
+    }
+
+    func flushAfterDismiss(
+        switchHandler: @escaping @MainActor (PanelSwitchAction) -> Void,
+        invocationHandler: @escaping @MainActor (ActionInvocation) -> Void
+    ) {
+        guard flushTask == nil else {
+            return
+        }
+
+        flushTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.flush(
+                switchHandler: switchHandler,
+                invocationHandler: invocationHandler
+            )
+        }
+    }
+
+    func flush(
+        switchHandler: (PanelSwitchAction) -> Void,
+        invocationHandler: (ActionInvocation) -> Void
+    ) {
+        flushTask?.cancel()
+        flushTask = nil
+
+        let panelSwitchAction = pendingPanelSwitchAction
+        let actionInvocation = pendingActionInvocation
+        pendingPanelSwitchAction = nil
+        pendingActionInvocation = nil
+
+        if let panelSwitchAction {
+            switchHandler(panelSwitchAction)
+        }
+
+        if let actionInvocation {
+            invocationHandler(actionInvocation)
+        }
     }
 }
 
@@ -1361,6 +1420,7 @@ private final class SecondaryPanelController: ObservableObject {
             panelHostingView = newHosting
             hostingView = newHosting
         }
+        applyCurrentAppearance()
 
         let fittingSize = hostingView.fittingSize
         let width = MenuBarPanelLayout.secondaryPanelWidth
@@ -1377,6 +1437,12 @@ private final class SecondaryPanelController: ObservableObject {
         panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
         panelWindow.orderFrontRegardless()
         self.panelWindow = panelWindow
+    }
+
+    func applyCurrentAppearance() {
+        let preference = AppAppearancePreference.stored()
+        preference.apply(to: panelWindow)
+        preference.apply(to: panelHostingView)
     }
 
     func hide() {
@@ -1405,6 +1471,7 @@ private final class SecondaryPanelController: ObservableObject {
         panel.hasShadow = true
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
+        AppAppearancePreference.stored().apply(to: panel)
         return panel
     }
 

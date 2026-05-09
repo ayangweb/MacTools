@@ -6,6 +6,7 @@ enum AppAppearancePreference: String, CaseIterable, Identifiable {
     case light
 
     static let userDefaultsKey = "app.appearancePreference"
+    static let didChangeNotification = Notification.Name("AppAppearancePreferenceDidChange")
 
     var id: String { rawValue }
 
@@ -22,13 +23,35 @@ enum AppAppearancePreference: String, CaseIterable, Identifiable {
 
     @MainActor
     func apply() {
+        NSApp.appearance = nsAppearance
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+    }
+
+    @MainActor
+    func apply(to view: NSView?) {
+        view?.appearance = nsAppearance
+    }
+
+    @MainActor
+    func apply(to window: NSWindow?) {
+        window?.appearance = nsAppearance
+    }
+
+    @MainActor
+    func apply(to popover: NSPopover) {
+        apply(to: popover.contentViewController?.view)
+        apply(to: popover.contentViewController?.view.window)
+    }
+
+    @MainActor
+    private var nsAppearance: NSAppearance? {
         switch self {
         case .system:
-            NSApp.appearance = nil
+            return nil
         case .dark:
-            NSApp.appearance = NSAppearance(named: .darkAqua)
+            return NSAppearance(named: .darkAqua)
         case .light:
-            NSApp.appearance = NSAppearance(named: .aqua)
+            return NSAppearance(named: .aqua)
         }
     }
 

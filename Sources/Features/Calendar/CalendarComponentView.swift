@@ -340,11 +340,14 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
                 events: events
             )
             let hostingController = NSHostingController(rootView: content)
+            AppAppearancePreference.stored().apply(to: hostingController.view)
             popover.contentViewController = hostingController
             popover.contentSize = NSSize(width: 230, height: min(hostingController.view.fittingSize.height, 260))
+            AppAppearancePreference.stored().apply(to: popover)
 
             if !popover.isShown {
                 popover.show(relativeTo: sourceView.bounds, of: sourceView, preferredEdge: .maxY)
+                AppAppearancePreference.stored().apply(to: popover)
             }
 
             self.popover = popover

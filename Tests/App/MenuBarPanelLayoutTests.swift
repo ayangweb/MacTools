@@ -138,6 +138,61 @@ final class MenuBarPanelLayoutTests: XCTestCase {
 }
 
 @MainActor
+final class DeferredPanelActionDispatcherTests: XCTestCase {
+    func testFlushAfterDismissRunsDeferredSwitchWithoutViewDisappear() async {
+        let dispatcher = DeferredPanelActionDispatcher()
+        var switchActions: [DeferredPanelActionDispatcher.PanelSwitchAction] = []
+        var invocationActions: [DeferredPanelActionDispatcher.ActionInvocation] = []
+
+        dispatcher.deferPanelSwitch(pluginID: "physical-clean-mode", isOn: true)
+        dispatcher.flushAfterDismiss(
+            switchHandler: { switchActions.append($0) },
+            invocationHandler: { invocationActions.append($0) }
+        )
+
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(
+            switchActions,
+            [
+                DeferredPanelActionDispatcher.PanelSwitchAction(
+                    pluginID: "physical-clean-mode",
+                    isOn: true
+                )
+            ]
+        )
+        XCTAssertTrue(invocationActions.isEmpty)
+    }
+
+    func testDisappearFlushDoesNotRunAlreadyFlushedActionTwice() async {
+        let dispatcher = DeferredPanelActionDispatcher()
+        var switchActions: [DeferredPanelActionDispatcher.PanelSwitchAction] = []
+
+        dispatcher.deferPanelSwitch(pluginID: "physical-clean-mode", isOn: true)
+        dispatcher.flushAfterDismiss(
+            switchHandler: { switchActions.append($0) },
+            invocationHandler: { _ in }
+        )
+
+        try? await Task.sleep(for: .milliseconds(20))
+        dispatcher.flush(
+            switchHandler: { switchActions.append($0) },
+            invocationHandler: { _ in }
+        )
+
+        XCTAssertEqual(
+            switchActions,
+            [
+                DeferredPanelActionDispatcher.PanelSwitchAction(
+                    pluginID: "physical-clean-mode",
+                    isOn: true
+                )
+            ]
+        )
+    }
+}
+
+@MainActor
 final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
     func testSwitchingActivationClearsPreviousAnchor() {
         let coordinator = HoverSecondaryPanelCoordinator(
