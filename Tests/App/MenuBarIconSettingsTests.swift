@@ -39,12 +39,16 @@ final class MenuBarIconSettingsTests: XCTestCase {
         )
 
         settings.importIcon(from: sourceURL, for: .light)
-        settings.renderMode = .original
+        settings.renderMode = .template
+        let lightPayload = settings.imagePayload(for: NSAppearance(named: .aqua))
+        let darkPayload = settings.imagePayload(for: NSAppearance(named: .darkAqua))
 
         XCTAssertTrue(settings.hasCustomIcon)
         XCTAssertNil(settings.lastErrorMessage)
         XCTAssertEqual(settings.recentItems.count, 1)
         XCTAssertEqual(settings.recentItems.first?.displayName, "status-icon")
+        XCTAssertFalse(lightPayload.isTemplate)
+        XCTAssertFalse(darkPayload.isTemplate)
 
         let reloadedSettings = MenuBarIconSettings(
             userDefaults: userDefaults,
@@ -101,6 +105,22 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertFalse(settings.hasCustomIcon)
         XCTAssertEqual(settings.recentItems.count, 1)
         XCTAssertTrue(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
+    }
+
+    func testRecentItemsKeepOnlyLatestSix() throws {
+        let settings = MenuBarIconSettings(
+            userDefaults: userDefaults,
+            rootDirectory: rootDirectory
+        )
+
+        for index in 0..<7 {
+            let sourceURL = try makeImageFile(name: "recent-\(index).png", color: .systemBlue)
+            settings.importIcon(from: sourceURL)
+        }
+
+        XCTAssertEqual(settings.recentItems.count, 6)
+        XCTAssertEqual(settings.recentItems.first?.displayName, "recent-6")
+        XCTAssertFalse(settings.recentItems.contains { $0.displayName == "recent-0" })
     }
 
     func testAnimationSpeedSettingsPersistAndClampManualMultiplier() {

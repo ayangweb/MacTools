@@ -725,7 +725,7 @@ final class MenuBarIconSettings: ObservableObject {
 
     private static let defaultIconName = NSImage.Name("MenuBarIcon")
     private static let iconPointSize = NSSize(width: 18, height: 18)
-    private static let maxRecentItems = 8
+    private static let maxRecentItems = 6
 
     @Published private var storedState: StoredState
     @Published private(set) var lastErrorMessage: String?
@@ -749,6 +749,7 @@ final class MenuBarIconSettings: ObservableObject {
         self.storedState.lightAdjustment = .default
         self.storedState.darkAdjustment = .default
         self.storedState.backgroundRemovalOptions = .default
+        self.storedState.renderMode = .original
         pruneMissingRecentItems()
     }
 
@@ -801,7 +802,11 @@ final class MenuBarIconSettings: ObservableObject {
         storedState.lightIconFileName != nil || storedState.darkIconFileName != nil
     }
 
-    func importIcon(from sourceURL: URL, for appearance: MenuBarIconAppearance) {
+    func importIcon(from sourceURL: URL, for _: MenuBarIconAppearance) {
+        importIcon(from: sourceURL)
+    }
+
+    func importIcon(from sourceURL: URL) {
         clearError()
 
         guard let sourceImage = NSImage(contentsOf: sourceURL) else {
@@ -833,12 +838,16 @@ final class MenuBarIconSettings: ObservableObject {
         )
 
         storeRecentItem(recentItem)
-        resetAdjustment(for: appearance)
-        setIconFileName(recentFileName, for: appearance)
+        setIconFileNameForAllAppearances(recentFileName)
+        resetAdjustmentsForAllAppearances()
         persist()
     }
 
-    func importAnimation(from sourceURL: URL, for appearance: MenuBarIconAppearance) {
+    func importAnimation(from sourceURL: URL, for _: MenuBarIconAppearance) {
+        importAnimation(from: sourceURL)
+    }
+
+    func importAnimation(from sourceURL: URL) {
         clearError()
 
         let sourceFrames: [NSImage]
@@ -881,12 +890,16 @@ final class MenuBarIconSettings: ObservableObject {
         )
 
         storeRecentItem(recentItem)
-        resetAdjustment(for: appearance)
-        setIconFileName(recentItem.fileName, for: appearance)
+        setIconFileNameForAllAppearances(recentItem.fileName)
+        resetAdjustmentsForAllAppearances()
         persist()
     }
 
-    func useBuiltInAnimation(_ animation: MenuBarIconBuiltInAnimation, for appearance: MenuBarIconAppearance) {
+    func useBuiltInAnimation(_ animation: MenuBarIconBuiltInAnimation, for _: MenuBarIconAppearance) {
+        useBuiltInAnimation(animation)
+    }
+
+    func useBuiltInAnimation(_ animation: MenuBarIconBuiltInAnimation) {
         clearError()
 
         let sourceFrames = animation.loadFrames()
@@ -916,12 +929,16 @@ final class MenuBarIconSettings: ObservableObject {
         )
 
         storeRecentItem(recentItem)
-        resetAdjustment(for: appearance)
-        setIconFileName(recentItem.fileName, for: appearance)
+        setIconFileNameForAllAppearances(recentItem.fileName)
+        resetAdjustmentsForAllAppearances()
         persist()
     }
 
-    func useRecentIcon(_ item: MenuBarIconRecentItem, for appearance: MenuBarIconAppearance) {
+    func useRecentIcon(_ item: MenuBarIconRecentItem, for _: MenuBarIconAppearance) {
+        useRecentIcon(item)
+    }
+
+    func useRecentIcon(_ item: MenuBarIconRecentItem) {
         let requiredFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
         guard requiredFileNames.allSatisfy({ fileManager.fileExists(atPath: recentsDirectory.appendingPathComponent($0).path) }) else {
             lastErrorMessage = "最近使用的图标文件已不存在。"
@@ -929,8 +946,8 @@ final class MenuBarIconSettings: ObservableObject {
             return
         }
 
-        setIconFileName(item.fileName, for: appearance)
-        resetAdjustment(for: appearance)
+        setIconFileNameForAllAppearances(item.fileName)
+        resetAdjustmentsForAllAppearances()
         persist()
     }
 
@@ -971,7 +988,7 @@ final class MenuBarIconSettings: ObservableObject {
             )
         }
 
-        image.isTemplate = renderMode == .template
+        image.isTemplate = false
         for frame in frames {
             frame.isTemplate = image.isTemplate
         }
@@ -1118,22 +1135,14 @@ final class MenuBarIconSettings: ObservableObject {
         storedState.recentItems = Array(storedState.recentItems.prefix(Self.maxRecentItems))
     }
 
-    private func setIconFileName(_ fileName: String?, for appearance: MenuBarIconAppearance) {
-        switch appearance {
-        case .light:
-            storedState.lightIconFileName = fileName
-        case .dark:
-            storedState.darkIconFileName = fileName
-        }
+    private func setIconFileNameForAllAppearances(_ fileName: String?) {
+        storedState.lightIconFileName = fileName
+        storedState.darkIconFileName = fileName
     }
 
-    private func resetAdjustment(for appearance: MenuBarIconAppearance) {
-        switch appearance {
-        case .light:
-            storedState.lightAdjustment = .default
-        case .dark:
-            storedState.darkAdjustment = .default
-        }
+    private func resetAdjustmentsForAllAppearances() {
+        storedState.lightAdjustment = .default
+        storedState.darkAdjustment = .default
     }
 
     private func saveOriginalImage(_ image: NSImage, to destinationURL: URL) -> Bool {

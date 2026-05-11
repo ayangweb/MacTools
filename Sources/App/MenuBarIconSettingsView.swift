@@ -1,18 +1,15 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MenuBarIconSettingsView: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
-    @State private var selectedAppearance: MenuBarIconAppearance = .light
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
 
-            MenuBarIconEditorControls(
-                iconSettings: iconSettings,
-                selectedAppearance: $selectedAppearance
-            )
+            MenuBarIconEditorControls(iconSettings: iconSettings)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -24,7 +21,7 @@ struct MenuBarIconSettingsView: View {
                 Text("状态栏图标")
                     .font(.system(size: 13, weight: .semibold))
 
-                Text("为浅色和深色菜单栏分别设置图标，导入时会自动扣除纯色背景。")
+                Text("为浅色和深色菜单栏统一设置图标，导入时会自动扣除纯色背景。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -43,25 +40,21 @@ struct MenuBarIconSettingsView: View {
 
 private struct MenuBarIconEditorControls: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
-    @Binding var selectedAppearance: MenuBarIconAppearance
     @State private var showsAnimationOptions = false
 
-    private let rowLabelWidth: CGFloat = 86
-    private let contentWidth: CGFloat = 420
+    private let rowLabelWidth: CGFloat = 76
+    private let contentWidth: CGFloat = 520
     private var sourceButtonWidth: CGFloat {
-        (contentWidth - 16) / 3
+        (contentWidth - 8) / 2
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            controlRow("应用到") {
-                Picker("应用到", selection: $selectedAppearance) {
-                    ForEach(MenuBarIconAppearance.allCases) { appearance in
-                        Text(appearance.title).tag(appearance)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
+        VStack(alignment: .leading, spacing: 14) {
+            controlRow("菜单栏预览", alignment: .top) {
+                MenuBarIconPreviewPair(
+                    lightPayload: iconSettings.imagePayload(for: NSAppearance(named: .aqua)),
+                    darkPayload: iconSettings.imagePayload(for: NSAppearance(named: .darkAqua))
+                )
                 .frame(width: contentWidth)
             }
 
@@ -74,20 +67,6 @@ private struct MenuBarIconEditorControls: View {
                 .foregroundStyle(.secondary)
                 .frame(width: contentWidth, alignment: .leading)
                 .padding(.leading, rowLabelWidth + 12)
-
-            controlRow("显示方式") {
-                Picker("显示方式", selection: Binding(
-                    get: { iconSettings.renderMode },
-                    set: { iconSettings.renderMode = $0 }
-                )) {
-                    ForEach(MenuBarIconRenderMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: contentWidth)
-            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Button {
@@ -128,25 +107,13 @@ private struct MenuBarIconEditorControls: View {
                 }
             }
 
-            controlRow("菜单栏预览", alignment: .top) {
-                MenuBarIconPreviewPair(
-                    lightImage: iconSettings.previewImage(for: .light),
-                    darkImage: iconSettings.previewImage(for: .dark),
-                    renderMode: iconSettings.renderMode,
-                    selectedAppearance: selectedAppearance
-                )
-                .frame(width: contentWidth)
-            }
-
             controlRow("最近使用", alignment: .top) {
-                MenuBarIconRecentGrid(
-                    iconSettings: iconSettings,
-                    appearance: selectedAppearance
-                )
-                .frame(width: contentWidth)
+                MenuBarIconRecentGrid(iconSettings: iconSettings)
+                    .frame(width: contentWidth, alignment: .leading)
             }
 
-            if let warningText = iconSettings.contrastReport(for: selectedAppearance).warningText {
+            if let warningText = iconSettings.contrastReport(for: .light).warningText
+                ?? iconSettings.contrastReport(for: .dark).warningText {
                 contentOnlyRow {
                     Label(warningText, systemImage: "exclamationmark.triangle")
                         .font(.footnote)
@@ -194,27 +161,15 @@ private struct MenuBarIconEditorControls: View {
     private var actionButtons: some View {
         HStack(spacing: 8) {
             Button {
-                selectImage()
+                selectMedia()
             } label: {
-                Label("上传图片", systemImage: "photo.badge.plus")
+                Label("上传图片或动画", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .frame(width: sourceButtonWidth)
 
-            Button {
-                selectAnimation()
-            } label: {
-                Label("上传动画", systemImage: "film")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .frame(width: sourceButtonWidth)
-
-            MenuBarIconBuiltInPicker(
-                iconSettings: iconSettings,
-                appearance: selectedAppearance
-            )
+            MenuBarIconBuiltInPicker(iconSettings: iconSettings)
             .frame(width: sourceButtonWidth)
         }
         .frame(width: contentWidth, alignment: .leading)
@@ -281,73 +236,68 @@ private struct MenuBarIconEditorControls: View {
         }
     }
 
-    private func selectImage() {
+    private func selectMedia() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = MenuBarIconProcessing.supportedImageContentTypes
-        panel.message = "选择一张图片作为 MacTools 状态栏图标"
+            + MenuBarIconProcessing.supportedAnimationContentTypes
+        panel.message = "选择图片、GIF 或 MP4 作为 MacTools 状态栏图标"
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
         }
 
-        iconSettings.importIcon(from: url, for: selectedAppearance)
-    }
-
-    private func selectAnimation() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowedContentTypes = MenuBarIconProcessing.supportedAnimationContentTypes
-        panel.message = "选择 5 MB 以内、画面简单的 GIF 或 MP4 动画"
-
-        guard panel.runModal() == .OK, let url = panel.url else {
-            return
+        let contentType = UTType(filenameExtension: url.pathExtension)
+        if let contentType,
+           MenuBarIconProcessing.supportedAnimationContentTypes.contains(where: { contentType.conforms(to: $0) }) {
+            iconSettings.importAnimation(from: url)
+        } else {
+            iconSettings.importIcon(from: url)
         }
-
-        iconSettings.importAnimation(from: url, for: selectedAppearance)
     }
 }
 
 private struct MenuBarIconPreviewPair: View {
-    let lightImage: NSImage
-    let darkImage: NSImage
-    let renderMode: MenuBarIconRenderMode
-    let selectedAppearance: MenuBarIconAppearance
+    let lightPayload: MenuBarIconImagePayload
+    let darkPayload: MenuBarIconImagePayload
 
     var body: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 8) {
             MenuBarIconPreviewStrip(
                 title: "浅色",
-                image: lightImage,
-                renderMode: renderMode,
+                payload: lightPayload,
                 backgroundColor: Color(nsColor: .windowBackgroundColor),
-                foregroundColor: .black,
-                isSelected: selectedAppearance == .light
+                foregroundColor: .black
             )
+            .frame(maxWidth: .infinity)
 
             MenuBarIconPreviewStrip(
                 title: "深色",
-                image: darkImage,
-                renderMode: renderMode,
+                payload: darkPayload,
                 backgroundColor: Color(red: 0.12, green: 0.12, blue: 0.13),
-                foregroundColor: .white,
-                isSelected: selectedAppearance == .dark
+                foregroundColor: .white
             )
+            .frame(maxWidth: .infinity)
         }
     }
 }
 
 private struct MenuBarIconPreviewStrip: View {
     let title: String
-    let image: NSImage
-    let renderMode: MenuBarIconRenderMode
+    let payload: MenuBarIconImagePayload
     let backgroundColor: Color
     let foregroundColor: Color
-    let isSelected: Bool
+
+    private var frameDuration: TimeInterval {
+        switch payload.speedMode {
+        case .manual:
+            return max(payload.frameDuration / payload.manualSpeedMultiplier, 1.0 / 30.0)
+        case .adaptiveSystemLoad:
+            return max(payload.frameDuration, 1.0 / 30.0)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -368,12 +318,15 @@ private struct MenuBarIconPreviewStrip: View {
 
                 Spacer()
 
-                Image(nsImage: image)
-                    .renderingMode(renderMode == .template ? .template : .original)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(foregroundColor)
-                    .frame(width: 18, height: 18)
+                TimelineView(.periodic(from: .now, by: frameDuration)) { context in
+                    Image(nsImage: frame(for: context.date))
+                        .renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(foregroundColor)
+                        .frame(width: 18, height: 18)
+                }
+                .frame(width: 18, height: 18)
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
@@ -381,33 +334,36 @@ private struct MenuBarIconPreviewStrip: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             )
         }
+    }
+
+    private func frame(for date: Date) -> NSImage {
+        guard payload.animationFrames.count > 1 else {
+            return payload.image
+        }
+
+        let frameIndex = Int(date.timeIntervalSinceReferenceDate / frameDuration) % payload.animationFrames.count
+        return payload.animationFrames[frameIndex]
     }
 }
 
 private struct MenuBarIconRecentGrid: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
-    let appearance: MenuBarIconAppearance
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if iconSettings.recentItems.isEmpty {
-                Text("上传图片后会显示在这里。")
+                Text("上传或选择图标后会显示在这里。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             } else {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.fixed(46), spacing: 8), count: 6),
-                    alignment: .leading,
-                    spacing: 8
-                ) {
-                    ForEach(iconSettings.recentItems) { item in
+                HStack(spacing: 8) {
+                    ForEach(iconSettings.recentItems.prefix(6)) { item in
                         Button {
-                            iconSettings.useRecentIcon(item, for: appearance)
+                            iconSettings.useRecentIcon(item)
                         } label: {
                             ZStack(alignment: .bottomTrailing) {
                                 Image(nsImage: iconSettings.previewImage(for: item))
@@ -436,14 +392,15 @@ private struct MenuBarIconRecentGrid: View {
                         .help(item.displayName)
                     }
                 }
+                .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private struct MenuBarIconBuiltInPicker: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
-    let appearance: MenuBarIconAppearance
     @State private var selectedGroup: MenuBarIconBuiltInAnimationGroup = .featured
     @State private var isPickerPresented = false
 
@@ -492,7 +449,7 @@ private struct MenuBarIconBuiltInPicker: View {
                 ) {
                     ForEach(filteredAnimations) { animation in
                         Button {
-                            iconSettings.useBuiltInAnimation(animation, for: appearance)
+                            iconSettings.useBuiltInAnimation(animation)
                             isPickerPresented = false
                         } label: {
                             VStack(spacing: 6) {
