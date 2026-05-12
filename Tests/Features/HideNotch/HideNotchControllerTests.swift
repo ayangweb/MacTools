@@ -91,6 +91,32 @@ final class HideNotchControllerTests: XCTestCase {
         XCTAssertEqual(snapshot.managedDisplayCount, 0)
     }
 
+    func testRefreshWhileDisabledAndAlreadyCleanDoesNotEnterProcessing() {
+        let record = makeHideNotchDisplayRecord(
+            id: 106,
+            displayIdentifier: "BUILTIN-CLEAN"
+        )
+        let stateStore = InMemoryHideNotchStateStore()
+        let maskManager = RecordingHideNotchDesktopMaskManager()
+        let controller = HideNotchController(
+            displayCatalog: StubHideNotchDisplayCatalog(records: [record]),
+            maskManager: maskManager,
+            stateStore: stateStore,
+            notificationCenter: NotificationCenter(),
+            workspaceNotificationCenter: NotificationCenter()
+        )
+        var stateChangeCount = 0
+        controller.onStateChange = {
+            stateChangeCount += 1
+        }
+
+        controller.refresh()
+
+        XCTAssertFalse(controller.snapshot().isProcessing)
+        XCTAssertEqual(maskManager.hideAllCallCount, 0)
+        XCTAssertEqual(stateChangeCount, 1)
+    }
+
     func testRefreshReconcilesDisplayChangesWhileEnabled() async {
         let initialRecord = makeHideNotchDisplayRecord(
             id: 103,

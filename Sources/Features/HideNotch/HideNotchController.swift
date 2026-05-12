@@ -93,6 +93,13 @@ final class HideNotchController: HideNotchWallpaperControlling {
             return
         }
 
+        if !forceNotify,
+           !stateStore.desiredEnabled,
+           maskManager.managedDisplayIdentifiers.isEmpty {
+            onStateChange?()
+            return
+        }
+
         isProcessing = true
         onStateChange?()
 
