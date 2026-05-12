@@ -270,22 +270,25 @@ private struct CalendarHolidayBadge: View {
 }
 
 private struct CalendarEventDots: View {
+    private static let dotSize: CGFloat = 3
+    private static let rowHeight: CGFloat = 5
+
     let events: [CalendarEventSummary]
 
     var body: some View {
         HStack(spacing: 2) {
             if events.isEmpty {
                 Color.clear
-                    .frame(width: 4, height: 4)
+                    .frame(width: Self.dotSize, height: Self.dotSize)
             } else {
                 ForEach(events) { event in
                     Circle()
                         .fill(Color(calendarEventColor: event.color))
-                        .frame(width: 4, height: 4)
+                        .frame(width: Self.dotSize, height: Self.dotSize)
                 }
             }
         }
-        .frame(height: 5)
+        .frame(height: Self.rowHeight)
     }
 }
 

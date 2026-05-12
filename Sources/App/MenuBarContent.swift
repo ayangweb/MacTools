@@ -4,6 +4,7 @@ import SwiftUI
 enum MenuBarPanelLayout {
     static let baseWidth: CGFloat = 288
     static let secondaryPanelWidth: CGFloat = 216
+    static let cornerRadius: CGFloat = 12
     static let panelSpacing: CGFloat = 10
     static let outerPadding: CGFloat = 6
     static let rootSpacing: CGFloat = 6
@@ -114,7 +115,7 @@ private enum FeatureRowLayout {
 }
 
 private enum MenuBarHoverStyle {
-    static let cornerRadius: CGFloat = 9
+    static let cornerRadius: CGFloat = MenuBarPanelLayout.cornerRadius
     static let fill = Color.primary.opacity(0.06)
     static let inset: CGFloat = 1
     static let navigationCornerRadius: CGFloat = 8
@@ -1263,7 +1264,7 @@ private struct SliderControl: View {
 }
 
 private struct SecondarySlidingPanel: View {
-    private static let cornerRadius: CGFloat = 12
+    private static let cornerRadius: CGFloat = MenuBarPanelLayout.cornerRadius
 
     let title: String
     let controls: [PluginPanelControl]
