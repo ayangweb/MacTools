@@ -39,12 +39,16 @@ final class MenuBarIconSettingsTests: XCTestCase {
         )
 
         settings.importIcon(from: sourceURL, for: .light)
-        settings.renderMode = .original
+        settings.renderMode = .template
+        let lightPayload = settings.imagePayload(for: NSAppearance(named: .aqua))
+        let darkPayload = settings.imagePayload(for: NSAppearance(named: .darkAqua))
 
         XCTAssertTrue(settings.hasCustomIcon)
         XCTAssertNil(settings.lastErrorMessage)
         XCTAssertEqual(settings.recentItems.count, 1)
         XCTAssertEqual(settings.recentItems.first?.displayName, "status-icon")
+        XCTAssertFalse(lightPayload.isTemplate)
+        XCTAssertFalse(darkPayload.isTemplate)
 
         let reloadedSettings = MenuBarIconSettings(
             userDefaults: userDefaults,
@@ -55,6 +59,22 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertTrue(reloadedSettings.hasCustomIcon)
         XCTAssertFalse(payload.isTemplate)
         XCTAssertEqual(payload.image.size, NSSize(width: 18, height: 18))
+    }
+
+    func testImportImageRemovesPlainBackgroundByDefault() throws {
+        let sourceURL = try makeImageFileWithBackground(name: "plain-background.png")
+        let settings = MenuBarIconSettings(
+            userDefaults: userDefaults,
+            rootDirectory: rootDirectory
+        )
+
+        settings.importIcon(from: sourceURL, for: .light)
+        let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
+        let cgImage = try XCTUnwrap(cgImage(from: payload.image))
+        let pixel = try XCTUnwrap(pixelRGBA(in: cgImage, x: 0, y: 0))
+
+        XCTAssertNil(settings.lastErrorMessage)
+        XCTAssertLessThan(pixel.alpha, 32)
     }
 
     func testDarkAppearanceFallsBackToLightCustomIcon() throws {
@@ -87,18 +107,20 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertTrue(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
     }
 
-    func testAdjustmentIsClamped() {
+    func testRecentItemsKeepOnlyLatestSix() throws {
         let settings = MenuBarIconSettings(
             userDefaults: userDefaults,
             rootDirectory: rootDirectory
         )
 
-        settings.setAdjustment(
-            MenuBarIconAdjustment(scale: 9, offsetX: -20, offsetY: 20),
-            for: .light
-        )
+        for index in 0..<7 {
+            let sourceURL = try makeImageFile(name: "recent-\(index).png", color: .systemBlue)
+            settings.importIcon(from: sourceURL)
+        }
 
-        XCTAssertEqual(settings.adjustment(for: .light), MenuBarIconAdjustment(scale: 2, offsetX: -8, offsetY: 8))
+        XCTAssertEqual(settings.recentItems.count, 6)
+        XCTAssertEqual(settings.recentItems.first?.displayName, "recent-6")
+        XCTAssertFalse(settings.recentItems.contains { $0.displayName == "recent-0" })
     }
 
     func testAnimationSpeedSettingsPersistAndClampManualMultiplier() {
@@ -217,6 +239,16 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertTrue(payload.isAnimated)
     }
 
+    func testBuiltInRunningLeftAnimationIsFirst() {
+        let settings = MenuBarIconSettings(
+            userDefaults: userDefaults,
+            rootDirectory: rootDirectory
+        )
+
+        XCTAssertEqual(settings.builtInAnimations.first?.id, "running-left")
+        XCTAssertEqual(settings.builtInAnimations.first?.group, .featured)
+    }
+
     func testBuiltInRunningLeftAnimationCanBeSelected() throws {
         let settings = MenuBarIconSettings(
             userDefaults: userDefaults,
@@ -231,7 +263,24 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertTrue(settings.hasCustomIcon)
         XCTAssertEqual(settings.recentItems.first?.displayName, "奔跑狗狗")
         XCTAssertEqual(payload.animationFrames.count, 52)
-        XCTAssertEqual(payload.frameDuration, 1.0 / 12.0)
+        XCTAssertEqual(payload.frameDuration, 1.0 / 24.0)
+        XCTAssertTrue(payload.isAnimated)
+    }
+
+    func testBuiltInRunCatAssetAnimationCanBeSelected() throws {
+        let settings = MenuBarIconSettings(
+            userDefaults: userDefaults,
+            rootDirectory: rootDirectory
+        )
+        let animation = try XCTUnwrap(settings.builtInAnimations.first { $0.id == "runcat-flash-cat" })
+
+        settings.useBuiltInAnimation(animation, for: .light)
+        let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
+
+        XCTAssertNil(settings.lastErrorMessage)
+        XCTAssertTrue(settings.hasCustomIcon)
+        XCTAssertEqual(settings.recentItems.first?.displayName, "闪电猫")
+        XCTAssertEqual(payload.animationFrames.count, 5)
         XCTAssertTrue(payload.isAnimated)
     }
 
@@ -276,6 +325,22 @@ final class MenuBarIconSettingsTests: XCTestCase {
         image.lockFocus()
         color.setFill()
         NSBezierPath(ovalIn: NSRect(x: 8, y: 8, width: 48, height: 48)).fill()
+        image.unlockFocus()
+
+        let url = rootDirectory.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        let data = try XCTUnwrap(MenuBarIconProcessing.pngData(from: image))
+        try data.write(to: url)
+        return url
+    }
+
+    private func makeImageFileWithBackground(name: String) throws -> URL {
+        let image = NSImage(size: NSSize(width: 64, height: 64))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 64, height: 64)).fill()
+        NSColor.black.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 16, y: 16, width: 32, height: 32)).fill()
         image.unlockFocus()
 
         let url = rootDirectory.appendingPathComponent(name)
