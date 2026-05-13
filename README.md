@@ -45,6 +45,21 @@ brew tap ggbond268/mactools
 brew install --cask mactools
 ```
 
+## 升级
+
+Homebrew 升级前需要先刷新 tap，确保本地拿到最新的 cask 配方：
+
+```bash
+brew update
+brew upgrade --cask --greedy ggbond268/mactools/mactools
+```
+
+如果仍提示已经是最新版本，可以先查看本地识别到的 cask 版本：
+
+```bash
+brew info --cask ggbond268/mactools/mactools
+```
+
 ## 状态栏图标自定义
 
 在“设置 > 通用”中可以自定义 MacTools 在 macOS 菜单栏里的图标：
