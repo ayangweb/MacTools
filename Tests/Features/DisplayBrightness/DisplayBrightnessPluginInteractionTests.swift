@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class DisplayBrightnessPluginInteractionTests: XCTestCase {
-    func testExpandingPluginRefreshesController() {
+    func testExpandingPluginUsesExistingSnapshotWithoutRefreshingController() {
         let controller = MockDisplayBrightnessController()
         controller.snapshotValue = DisplayBrightnessSnapshot(
             displays: [
@@ -15,7 +15,7 @@ final class DisplayBrightnessPluginInteractionTests: XCTestCase {
         let plugin = DisplayBrightnessPlugin(controller: controller)
         plugin.handlePanelAction(.setDisclosureExpanded(true))
 
-        XCTAssertEqual(controller.refreshCount, 1)
+        XCTAssertEqual(controller.refreshCount, 0)
         XCTAssertTrue(plugin.panelState.isExpanded)
     }
 

@@ -52,6 +52,7 @@ final class DisplayResolutionPlugin: FeaturePlugin {
     private var lastErrorMessage: String?
     private let controller: DisplayResolutionControlling
     private let systemSettingsLauncher: DisplaySystemSettingsLauncher
+    private var snapshot = DisplayResolutionSnapshot(displays: [])
 
     init(
         controller: DisplayResolutionControlling = DisplayResolutionController(),
@@ -59,17 +60,12 @@ final class DisplayResolutionPlugin: FeaturePlugin {
     ) {
         self.controller = controller
         self.systemSettingsLauncher = systemSettingsLauncher
+        refreshSnapshot()
     }
 
     var panelState: PluginPanelState {
-        let displays = controller.listConnectedDisplays()
-        let panelDisplays = displays.compactMap { display -> PanelDisplay? in
-            let modes = Self.visibleModes(controller.listAvailableResolutions(for: display.id))
-            guard !modes.isEmpty else {
-                return nil
-            }
-            return PanelDisplay(display: display, modes: modes)
-        }
+        let displays = snapshot.displays
+        let panelDisplays = displays.filter { !$0.modes.isEmpty }
 
         if !panelDisplays.contains(where: { $0.display.id == selectedDisplayID }) {
             selectedDisplayID = nil
@@ -116,7 +112,9 @@ final class DisplayResolutionPlugin: FeaturePlugin {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    func refresh() {}
+    func refresh() {
+        refreshSnapshot()
+    }
 
     func handlePanelAction(_ action: PluginPanelAction) {
         switch action {
@@ -153,12 +151,16 @@ final class DisplayResolutionPlugin: FeaturePlugin {
                 return
             }
 
-            guard controller.listConnectedDisplays().contains(where: { $0.id == displayID }) else {
+            refreshSnapshot()
+
+            guard snapshot.displays.contains(where: { $0.display.id == displayID }) else {
                 handleApplyFailure(.displayUnavailable(displayID: displayID), displayID: displayID, modeId: modeId)
                 return
             }
 
-            guard let target = controller.listAvailableResolutions(for: displayID).first(where: { $0.modeId == modeId }) else {
+            guard let target = snapshot.displays.first(where: { $0.display.id == displayID })?
+                .allModes
+                .first(where: { $0.modeId == modeId }) else {
                 handleApplyFailure(.modeNotFound(modeId: modeId), displayID: displayID, modeId: modeId)
                 return
             }
@@ -167,6 +169,7 @@ final class DisplayResolutionPlugin: FeaturePlugin {
 
             switch controller.applyResolution(target, for: displayID) {
             case .success:
+                refreshSnapshot()
                 lastErrorMessage = nil
                 AppLog.displayResolutionPlugin.info("applied \(target.width)×\(target.height) on display \(displayID)")
                 onStateChange?()
@@ -221,6 +224,20 @@ final class DisplayResolutionPlugin: FeaturePlugin {
         let prefix = "display."
         guard controlID.hasPrefix(prefix) else { return nil }
         return CGDirectDisplayID(controlID.dropFirst(prefix.count))
+    }
+
+    private func refreshSnapshot() {
+        let displays = controller.listConnectedDisplays()
+        let panelDisplays = displays.map { display in
+            let modes = controller.listAvailableResolutions(for: display.id)
+            return PanelDisplay(
+                display: display,
+                modes: Self.visibleModes(modes),
+                allModes: modes
+            )
+        }
+
+        snapshot = DisplayResolutionSnapshot(displays: panelDisplays)
     }
 
     private func subtitleForRowState(_ displays: [PanelDisplay]) -> String {
@@ -329,4 +346,9 @@ final class DisplayResolutionPlugin: FeaturePlugin {
 private struct PanelDisplay {
     let display: DisplayInfo
     let modes: [DisplayResolutionInfo]
+    let allModes: [DisplayResolutionInfo]
+}
+
+private struct DisplayResolutionSnapshot {
+    let displays: [PanelDisplay]
 }

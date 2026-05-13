@@ -132,6 +132,7 @@ final class DisplayResolutionPluginSidePanelTests: XCTestCase {
         controller.displays = [
             makeDisplay(id: 3, name: "LG UltraFine")
         ]
+        plugin.refresh()
 
         XCTAssertNil(plugin.panelState.detail?.secondaryPanel)
         XCTAssertNil(plugin.panelState.detail?.primaryControls.first?.selectedOptionID)
@@ -236,6 +237,47 @@ final class DisplayResolutionPluginSidePanelTests: XCTestCase {
         XCTAssertNil(plugin.panelState.errorMessage)
     }
 
+    func testPanelStateUsesCachedResolutionSnapshot() {
+        let controller = MockDisplayResolutionController()
+        controller.displays = [
+            makeDisplay(id: 2, name: "Studio Display", isMain: true)
+        ]
+        controller.modesByDisplayID = [
+            2: [makeMode(modeId: 8, width: 1920, height: 1080, isCurrent: true)]
+        ]
+
+        let plugin = DisplayResolutionPlugin(controller: controller)
+        controller.listConnectedDisplaysCount = 0
+        controller.listAvailableResolutionsCount = 0
+
+        _ = plugin.panelState
+        plugin.handlePanelAction(.setDisclosureExpanded(true))
+        _ = plugin.panelState
+        _ = plugin.panelState.detail?.secondaryPanel(controlID: "display-navigation", optionID: "2")
+
+        XCTAssertEqual(controller.listConnectedDisplaysCount, 0)
+        XCTAssertEqual(controller.listAvailableResolutionsCount, 0)
+    }
+
+    func testRefreshUpdatesResolutionSnapshot() {
+        let controller = MockDisplayResolutionController()
+        controller.displays = [
+            makeDisplay(id: 2, name: "Studio Display", isMain: true)
+        ]
+        controller.modesByDisplayID = [
+            2: [makeMode(modeId: 8, width: 1920, height: 1080, isCurrent: true)]
+        ]
+
+        let plugin = DisplayResolutionPlugin(controller: controller)
+        controller.modesByDisplayID = [
+            2: [makeMode(modeId: 12, width: 2560, height: 1440, isCurrent: true)]
+        ]
+
+        plugin.refresh()
+
+        XCTAssertEqual(plugin.panelState.subtitle, "主屏 2560×1440")
+    }
+
     private func makePlugin() -> DisplayResolutionPlugin {
         let controller = MockDisplayResolutionController()
         controller.displays = [
@@ -313,11 +355,17 @@ private final class MockDisplayResolutionController: DisplayResolutionControllin
     var modesByDisplayID: [CGDirectDisplayID: [DisplayResolutionInfo]] = [:]
     var applyCalls: [ApplyCall] = []
     var applyResult: Result<Void, DisplayResolutionError> = .success(())
+    var listConnectedDisplaysCount = 0
+    var listAvailableResolutionsCount = 0
 
-    func listConnectedDisplays() -> [DisplayInfo] { displays }
+    func listConnectedDisplays() -> [DisplayInfo] {
+        listConnectedDisplaysCount += 1
+        return displays
+    }
 
     func listAvailableResolutions(for displayID: CGDirectDisplayID) -> [DisplayResolutionInfo] {
-        modesByDisplayID[displayID] ?? []
+        listAvailableResolutionsCount += 1
+        return modesByDisplayID[displayID] ?? []
     }
 
     func applyResolution(

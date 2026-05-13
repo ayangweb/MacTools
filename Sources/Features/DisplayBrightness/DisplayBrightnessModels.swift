@@ -11,7 +11,6 @@ enum DisplayBrightnessBackendKind: Equatable {
 struct DisplayBrightnessDisplay: Identifiable, Equatable {
     let display: DisplayInfo
     let brightness: Double
-    let backendKind: DisplayBrightnessBackendKind
     let isPendingWrite: Bool
 
     var id: CGDirectDisplayID { display.id }

@@ -10,6 +10,26 @@ private final class WeakBrightnessControllerRef: @unchecked Sendable {
     }
 }
 
+private final class BrightnessWriteGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var nextWriteDate: [CGDirectDisplayID: Date] = [:]
+
+    func waitTurn(for displayID: CGDirectDisplayID, minimumInterval: TimeInterval) {
+        let delay = lock.withLock { () -> TimeInterval in
+            let now = Date()
+            let scheduledDate = max(now, nextWriteDate[displayID] ?? now)
+            nextWriteDate[displayID] = scheduledDate.addingTimeInterval(minimumInterval)
+            return max(0, scheduledDate.timeIntervalSince(now))
+        }
+
+        guard delay > 0 else {
+            return
+        }
+
+        Thread.sleep(forTimeInterval: delay)
+    }
+}
+
 @MainActor
 final class DisplayBrightnessController: DisplayBrightnessControlling {
     private struct ManagedDisplay {
@@ -20,6 +40,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         var pendingBrightness: Double?
         var writeInFlight = false
         var scheduledFlush: DispatchWorkItem?
+        var pendingReadbackAfterWrite = false
     }
 
     var onStateChange: (() -> Void)?
@@ -28,6 +49,8 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
     private let backendBuilder: DisplayBrightnessBackendBuilding
     private let logger = AppLog.displayBrightnessController
     private let shortWriteDelay: TimeInterval
+    private let minimumWriteInterval: TimeInterval
+    private let writeGate = BrightnessWriteGate()
 
     private var managedDisplays: [CGDirectDisplayID: ManagedDisplay] = [:]
     private var displayOrder: [CGDirectDisplayID] = []
@@ -37,13 +60,15 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
     init(
         displayProvider: DisplayProviding = SystemDisplayService(),
         backendBuilder: DisplayBrightnessBackendBuilding? = nil,
-        shortWriteDelay: TimeInterval = 0.05
+        shortWriteDelay: TimeInterval = 0.08,
+        minimumWriteInterval: TimeInterval = 0.08
     ) {
         self.displayProvider = displayProvider
         self.backendBuilder = backendBuilder ?? SystemDisplayBrightnessBackendBuilder(
-            displayProvider: displayProvider
+            resolveArm64Services: Arm64DDCServiceMatcher.resolveServices
         )
         self.shortWriteDelay = shortWriteDelay
+        self.minimumWriteInterval = minimumWriteInterval
 
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
@@ -84,7 +109,8 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 lastCommittedBrightness: brightness,
                 pendingBrightness: previous?.pendingBrightness,
                 writeInFlight: previous?.writeInFlight ?? false,
-                scheduledFlush: previous?.scheduledFlush
+                scheduledFlush: previous?.scheduledFlush,
+                pendingReadbackAfterWrite: previous?.pendingReadbackAfterWrite ?? false
             )
             nextDisplayOrder.append(display.id)
         }
@@ -106,7 +132,6 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
             return DisplayBrightnessDisplay(
                 display: managedDisplay.display,
                 brightness: managedDisplay.currentBrightness,
-                backendKind: managedDisplay.backend.kind,
                 isPendingWrite: managedDisplay.pendingBrightness != nil || managedDisplay.writeInFlight
             )
         }
@@ -134,11 +159,13 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         managedDisplay.pendingBrightness = clampedValue
         managedDisplay.scheduledFlush?.cancel()
         managedDisplay.scheduledFlush = nil
+        managedDisplay.pendingReadbackAfterWrite = phase == .ended
         lastErrorMessage = nil
         managedDisplays[displayID] = managedDisplay
 
         let delay = phase == .ended ? 0 : shortWriteDelay
         scheduleWrite(for: displayID, delay: delay)
+
         onStateChange?()
     }
 
@@ -193,6 +220,8 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         managedDisplay.writeInFlight = true
         managedDisplay.pendingBrightness = nil
         managedDisplay.scheduledFlush = nil
+        let needsReadback = managedDisplay.pendingReadbackAfterWrite
+        managedDisplay.pendingReadbackAfterWrite = false
         let backend = managedDisplay.backend
         let displayName = managedDisplay.display.name
         let controllerRef = WeakBrightnessControllerRef(self)
@@ -204,7 +233,10 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 backend: backend,
                 displayID: displayID,
                 targetValue: targetValue,
-                displayName: displayName
+                needsReadback: needsReadback,
+                displayName: displayName,
+                writeGate: writeGate,
+                minimumWriteInterval: minimumWriteInterval
             )
         )
     }
@@ -212,6 +244,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
     private func finishWrite(
         for displayID: CGDirectDisplayID,
         targetValue: Double,
+        readbackValue: Double?,
         displayName: String,
         result: Result<Void, Error>
     ) {
@@ -223,9 +256,10 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
 
         switch result {
         case .success:
-            managedDisplay.lastCommittedBrightness = targetValue
+            let committedBrightness = readbackValue.map(Self.clamp) ?? targetValue
+            managedDisplay.lastCommittedBrightness = committedBrightness
             if managedDisplay.pendingBrightness == nil {
-                managedDisplay.currentBrightness = targetValue
+                managedDisplay.currentBrightness = committedBrightness
             }
             lastErrorMessage = nil
         case .failure(let error):
@@ -282,13 +316,21 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         backend: any DisplayBrightnessBackend,
         displayID: CGDirectDisplayID,
         targetValue: Double,
-        displayName: String
+        needsReadback: Bool,
+        displayName: String,
+        writeGate: BrightnessWriteGate,
+        minimumWriteInterval: TimeInterval
     ) -> DispatchWorkItem {
         DispatchWorkItem {
             let result: Result<Void, Error>
+            var readbackValue: Double?
 
             do {
+                writeGate.waitTurn(for: displayID, minimumInterval: minimumWriteInterval)
                 try backend.writeBrightness(targetValue)
+                if needsReadback {
+                    readbackValue = try? backend.readBrightness()
+                }
                 result = .success(())
             } catch {
                 result = .failure(error)
@@ -298,10 +340,22 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 controllerRef.value?.finishWrite(
                     for: displayID,
                     targetValue: targetValue,
+                    readbackValue: readbackValue,
                     displayName: displayName,
                     result: result
                 )
             }
         }
+    }
+}
+
+private extension NSLock {
+    func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        lock()
+        defer {
+            unlock()
+        }
+
+        return try body()
     }
 }

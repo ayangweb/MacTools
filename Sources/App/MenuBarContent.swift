@@ -146,7 +146,7 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
     init(
         dismissDelay: Duration = .milliseconds(160),
-        activationDelay: Duration? = .milliseconds(120)
+        activationDelay: Duration? = .milliseconds(60)
     ) {
         self.dismissDelay = dismissDelay
         self.activationDelay = activationDelay

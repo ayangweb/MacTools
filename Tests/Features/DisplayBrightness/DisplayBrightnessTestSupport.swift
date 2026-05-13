@@ -27,13 +27,11 @@ func makeBrightnessDisplay(
     id: CGDirectDisplayID,
     name: String,
     brightness: Double,
-    backendKind: DisplayBrightnessBackendKind = .appleNative,
     isPendingWrite: Bool = false
 ) -> DisplayBrightnessDisplay {
     DisplayBrightnessDisplay(
         display: makeTestDisplay(id: id, name: name),
         brightness: brightness,
-        backendKind: backendKind,
         isPendingWrite: isPendingWrite
     )
 }
@@ -47,7 +45,10 @@ final class MockDisplayBrightnessController: DisplayBrightnessControlling {
     }
 
     var onStateChange: (() -> Void)?
-    var snapshotValue = DisplayBrightnessSnapshot(displays: [], errorMessage: nil)
+    var snapshotValue = DisplayBrightnessSnapshot(
+        displays: [],
+        errorMessage: nil
+    )
     var refreshCount = 0
     var setBrightnessCalls: [SetBrightnessCall] = []
 
@@ -114,7 +115,6 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
 
     var writeDelay: TimeInterval = 0
     var blockFirstWrite = false
-    let firstWriteStarted = DispatchSemaphore(value: 0)
     let allowFirstWriteToFinish = DispatchSemaphore(value: 0)
 
     private let lock = NSLock()
@@ -123,8 +123,10 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
     private var recordedWritesStorage: [Double] = []
     private var cleanupCountStorage = 0
     private var writeCountStorage = 0
+    private var readCountStorage = 0
     private var activeWrites = 0
     private var maxConcurrentWritesStorage = 0
+    private var storedBrightnessAfterWrite: Double?
 
     init(
         kind: DisplayBrightnessBackendKind,
@@ -148,6 +150,10 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         lock.withLock { writeCountStorage }
     }
 
+    var readCount: Int {
+        lock.withLock { readCountStorage }
+    }
+
     var maxConcurrentWrites: Int {
         lock.withLock { maxConcurrentWritesStorage }
     }
@@ -158,8 +164,17 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         }
     }
 
+    func setStoredBrightnessAfterWrite(_ value: Double?) {
+        lock.withLock {
+            storedBrightnessAfterWrite = value
+        }
+    }
+
     func readBrightness() throws -> Double {
-        lock.withLock { storedBrightness }
+        lock.withLock {
+            readCountStorage += 1
+            return storedBrightness
+        }
     }
 
     func writeBrightness(_ value: Double) throws {
@@ -178,7 +193,6 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         }
 
         if shouldBlock {
-            firstWriteStarted.signal()
             allowFirstWriteToFinish.wait()
         }
 
@@ -193,7 +207,7 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         }
 
         lock.withLock {
-            storedBrightness = value
+            storedBrightness = storedBrightnessAfterWrite ?? value
         }
     }
 
