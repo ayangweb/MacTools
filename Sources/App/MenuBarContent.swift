@@ -1292,7 +1292,7 @@ private struct SecondarySlidingPanel: View {
                 onActionInvoke: { _, _ in }
             )
         }
-        .padding(10)
+        .padding(MenuBarPanelLayout.outerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             PopoverMaterialBackground()

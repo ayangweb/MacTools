@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class DisplayBrightnessPlugin: FeaturePlugin {
+final class DisplayBrightnessPlugin: FeaturePlugin, DisplayTopologyRefreshing {
     private enum Constants {
         static let displayControlPrefix = "display."
         static let brightnessControlSuffix = ".brightness"
@@ -66,6 +66,10 @@ final class DisplayBrightnessPlugin: FeaturePlugin {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
+        controller.refresh()
+    }
+
+    func refreshDisplayTopology() {
         controller.refresh()
     }
 

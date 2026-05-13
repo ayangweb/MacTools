@@ -27,7 +27,7 @@ struct WorkspaceDisplaySystemSettingsLauncher: DisplaySystemSettingsLauncher {
 }
 
 @MainActor
-final class DisplayResolutionPlugin: FeaturePlugin {
+final class DisplayResolutionPlugin: FeaturePlugin, DisplayTopologyRefreshing {
     private static let unavailableModesSubtitle = "未检测到可用分辨率"
     private static let openSystemSettingsTitle = "打开系统显示器设置"
     private static let openSystemSettingsIcon = "gearshape"
@@ -113,6 +113,10 @@ final class DisplayResolutionPlugin: FeaturePlugin {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
+        refreshSnapshot()
+    }
+
+    func refreshDisplayTopology() {
         refreshSnapshot()
     }
 

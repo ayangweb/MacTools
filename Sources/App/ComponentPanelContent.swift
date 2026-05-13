@@ -15,8 +15,8 @@ enum ComponentPanelLayout {
     static let horizontalSpacing: CGFloat = 8
     static let verticalSpacing: CGFloat = 8
     static let spacing = horizontalSpacing
-    static let horizontalPadding: CGFloat = 10
-    static let verticalPadding: CGFloat = 10
+    static let horizontalPadding = MenuBarPanelLayout.outerPadding
+    static let verticalPadding = MenuBarPanelLayout.outerPadding
     static let emptyContentHeight: CGFloat = 164
     static let maximumPanelHeight: CGFloat = 720
     static let minimumPanelHeight: CGFloat = 220

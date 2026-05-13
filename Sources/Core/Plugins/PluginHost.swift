@@ -36,11 +36,14 @@ final class PluginHost: ObservableObject {
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
     private let globalShortcutManager: GlobalShortcutManager
+    private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
+    private let displayTopologyRefreshDelay: Duration
 
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
     private var isHandlingPluginAction = false
+    private var displayTopologyRefreshTask: Task<Void, Never>?
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
@@ -71,7 +74,8 @@ final class PluginHost: ObservableObject {
             ],
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
-            globalShortcutManager: GlobalShortcutManager()
+            globalShortcutManager: GlobalShortcutManager(),
+            displayConfigurationObserver: SystemDisplayConfigurationObserver()
         )
     }
 
@@ -80,7 +84,9 @@ final class PluginHost: ObservableObject {
         componentPlugins: [any ComponentPlugin] = [],
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
-        globalShortcutManager: GlobalShortcutManager
+        globalShortcutManager: GlobalShortcutManager,
+        displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
+        displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) {
         self.plugins = plugins.sorted {
             if $0.manifest.order == $1.manifest.order {
@@ -99,6 +105,8 @@ final class PluginHost: ObservableObject {
         self.shortcutStore = shortcutStore
         self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
         self.globalShortcutManager = globalShortcutManager
+        self.displayConfigurationObserver = displayConfigurationObserver
+        self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
 
         for plugin in corePluginsForCallbacks() {
             let pluginID = plugin.metadata.id
@@ -118,7 +126,15 @@ final class PluginHost: ObservableObject {
             self?.handleShortcutTrigger(shortcutID: shortcutID)
         }
 
+        self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
+            self?.scheduleDisplayTopologyRefresh()
+        }
+
         refreshAll()
+    }
+
+    deinit {
+        displayTopologyRefreshTask?.cancel()
     }
 
     func refreshAll() {
@@ -129,6 +145,11 @@ final class PluginHost: ObservableObject {
         }
 
         syncGlobalShortcuts()
+    }
+
+    func refreshDisplayTopology() {
+        displayTopologyRefreshTask?.cancel()
+        refreshDisplayTopologyNow()
     }
 
     func isSwitchOn(for pluginID: String) -> Bool {
@@ -643,6 +664,35 @@ final class PluginHost: ObservableObject {
         }
 
         rebuildDerivedState()
+    }
+
+    private func scheduleDisplayTopologyRefresh() {
+        displayTopologyRefreshTask?.cancel()
+        let refreshDelay = displayTopologyRefreshDelay
+        displayTopologyRefreshTask = Task { @MainActor [weak self, refreshDelay] in
+            do {
+                try await Task.sleep(for: refreshDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.refreshDisplayTopologyNow()
+        }
+    }
+
+    private func refreshDisplayTopologyNow() {
+        displayTopologyRefreshTask = nil
+        handlePluginAction {
+            for plugin in corePluginsForCallbacks() {
+                if let displayTopologyRefreshing = plugin as? DisplayTopologyRefreshing {
+                    displayTopologyRefreshing.refreshDisplayTopology()
+                }
+            }
+        }
     }
 
     private func buildPluginConfigurationItems(

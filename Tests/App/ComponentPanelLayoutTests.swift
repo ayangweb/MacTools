@@ -10,15 +10,15 @@ final class ComponentPanelLayoutTests: XCTestCase {
         XCTAssertEqual(ComponentPanelLayout.cellHeight, 94)
         XCTAssertEqual(ComponentPanelLayout.horizontalSpacing, 8)
         XCTAssertEqual(ComponentPanelLayout.verticalSpacing, 8)
-        XCTAssertEqual(ComponentPanelLayout.horizontalPadding, 10)
-        XCTAssertEqual(ComponentPanelLayout.verticalPadding, 10)
+        XCTAssertEqual(ComponentPanelLayout.horizontalPadding, MenuBarPanelLayout.outerPadding)
+        XCTAssertEqual(ComponentPanelLayout.verticalPadding, MenuBarPanelLayout.outerPadding)
         XCTAssertEqual(
             ComponentPanelLayout.panelWidth,
             ComponentPanelLayout.horizontalPadding * 2
                 + ComponentPanelLayout.cellWidth * 4
                 + ComponentPanelLayout.horizontalSpacing * 3
         )
-        XCTAssertEqual(ComponentPanelLayout.panelWidth, 324)
+        XCTAssertEqual(ComponentPanelLayout.panelWidth, 316)
     }
 
     func testGridUsesDedicatedRowHeightForDenseComponents() {

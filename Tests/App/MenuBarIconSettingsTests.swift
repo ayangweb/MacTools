@@ -100,11 +100,28 @@ final class MenuBarIconSettingsTests: XCTestCase {
         )
 
         settings.importIcon(from: sourceURL, for: .light)
+        XCTAssertFalse(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
+
         settings.resetToDefault()
 
         XCTAssertFalse(settings.hasCustomIcon)
         XCTAssertEqual(settings.recentItems.count, 1)
         XCTAssertTrue(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
+    }
+
+    func testImagePayloadCacheInvalidatesWhenAnimationSpeedChanges() throws {
+        let sourceURL = try makeAnimatedGIFFile(name: "cache-speed.gif")
+        let settings = MenuBarIconSettings(
+            userDefaults: userDefaults,
+            rootDirectory: rootDirectory
+        )
+
+        settings.importAnimation(from: sourceURL, for: .light)
+        XCTAssertEqual(settings.imagePayload(for: NSAppearance(named: .aqua)).manualSpeedMultiplier, 1)
+
+        settings.manualAnimationSpeedMultiplier = 1.8
+
+        XCTAssertEqual(settings.imagePayload(for: NSAppearance(named: .aqua)).manualSpeedMultiplier, 1.8)
     }
 
     func testRecentItemsKeepOnlyLatestSix() throws {
