@@ -178,16 +178,28 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(componentPlugin.makeComponentViewCallCount, 1)
     }
 
-    func testWarmComponentViewsBuildsEachVisibleComponentOnce() {
+    func testDiscardComponentViewsReleasesCachedComponentContent() {
         let first = MockComponentPlugin(id: "first", order: 1)
         let second = MockComponentPlugin(id: "second", order: 2)
         let host = makeHost(componentPlugins: [first, second])
 
-        host.warmComponentViews(dismiss: {})
-        host.warmComponentViews(dismiss: {})
+        _ = host.componentViewItem(for: "first", dismiss: {})
+        _ = host.componentViewItem(for: "second", dismiss: {})
+        host.discardComponentViews()
+        _ = host.componentViewItem(for: "first", dismiss: {})
+        _ = host.componentViewItem(for: "second", dismiss: {})
 
-        XCTAssertEqual(first.makeComponentViewCallCount, 1)
-        XCTAssertEqual(second.makeComponentViewCallCount, 1)
+        XCTAssertEqual(first.makeComponentViewCallCount, 2)
+        XCTAssertEqual(second.makeComponentViewCallCount, 2)
+    }
+
+    func testComponentContextCarriesPanelVisibility() {
+        let componentPlugin = MockComponentPlugin(id: "component")
+        let host = makeHost(componentPlugins: [componentPlugin])
+
+        _ = host.componentViewItem(for: "component", dismiss: {}, isPanelVisible: false)
+
+        XCTAssertEqual(componentPlugin.receivedPanelVisibilityValues, [false])
     }
 
     func testFeaturePluginStillAppearsOnlyInPanelItems() {
@@ -283,6 +295,7 @@ private final class MockComponentPlugin: ComponentPlugin {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private let isActive: Bool
     private(set) var makeComponentViewCallCount = 0
+    private(set) var receivedPanelVisibilityValues: [Bool] = []
 
     init(
         id: String,
@@ -322,6 +335,7 @@ private final class MockComponentPlugin: ComponentPlugin {
 
     func makeComponentView(context: PluginComponentContext) -> AnyView {
         makeComponentViewCallCount += 1
+        receivedPanelVisibilityValues.append(context.isPanelVisible)
         return AnyView(Text(context.pluginID))
     }
 

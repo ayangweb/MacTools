@@ -232,10 +232,7 @@ final class MenuBarStatusItemController: NSObject {
         }
 
         animationFrameIndex = (animationFrameIndex + 1) % animationFrames.count
-        let frame = animationFrames[animationFrameIndex]
-        let displayFrame = frame.copy() as? NSImage ?? frame
-        displayFrame.isTemplate = frame.isTemplate
-        button.image = displayFrame
+        button.image = animationFrames[animationFrameIndex]
         button.needsDisplay = true
     }
 

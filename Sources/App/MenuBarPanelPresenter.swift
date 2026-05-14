@@ -38,6 +38,7 @@ final class MenuBarPanelPresenter: NSObject {
             rootView: ComponentPanelContent(
                 pluginHost: pluginHost,
                 panelHeight: ComponentPanelLayout.minimumPanelHeight,
+                isPanelVisible: false,
                 onDismiss: onDismiss
             )
         )
@@ -88,6 +89,7 @@ final class MenuBarPanelPresenter: NSObject {
         componentHostingController.rootView = ComponentPanelContent(
             pluginHost: pluginHost,
             panelHeight: panelHeight,
+            isPanelVisible: true,
             onDismiss: onDismiss
         )
         applyCurrentAppearance()
@@ -120,7 +122,6 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func prewarm() {
-        pluginHost.warmComponentViews(dismiss: onDismiss)
         featurePopover.contentSize = MenuBarPanelLayout.contentSize(for: pluginHost.panelItems)
         componentPopover.contentSize = NSSize(
             width: ComponentPanelLayout.panelWidth,
@@ -175,6 +176,16 @@ final class MenuBarPanelPresenter: NSObject {
 
 extension MenuBarPanelPresenter: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
+        if let popover = notification.object as? NSPopover, popover === componentPopover {
+            componentHostingController.rootView = ComponentPanelContent(
+                pluginHost: pluginHost,
+                panelHeight: ComponentPanelLayout.minimumPanelHeight,
+                isPanelVisible: false,
+                onDismiss: onDismiss
+            )
+            pluginHost.discardComponentViews()
+        }
+
         guard !featurePopover.isShown, !componentPopover.isShown else {
             return
         }

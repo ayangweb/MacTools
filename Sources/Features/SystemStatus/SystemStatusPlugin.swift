@@ -16,6 +16,12 @@ final class SystemStatusPlugin: ComponentPlugin {
         span: .fourByTwo
     )
 
+    private let viewModel: SystemStatusViewModel
+
+    init(viewModel: SystemStatusViewModel = SystemStatusViewModel()) {
+        self.viewModel = viewModel
+    }
+
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
@@ -35,7 +41,12 @@ final class SystemStatusPlugin: ComponentPlugin {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func makeComponentView(context: PluginComponentContext) -> AnyView {
-        AnyView(SystemStatusComponentView())
+        AnyView(
+            SystemStatusComponentView(
+                viewModel: viewModel,
+                isPanelVisible: context.isPanelVisible
+            )
+        )
     }
 
     func refresh() {}
@@ -53,14 +64,14 @@ final class SystemStatusPlugin: ComponentPlugin {
 final class SystemStatusViewModel: ObservableObject {
     @Published private(set) var snapshot = SystemStatusSnapshot.empty
 
-    private let sampler: SystemStatusSampler
+    private let sampler: any SystemStatusSampling
     private var fastTask: Task<Void, Never>?
     private var slowTask: Task<Void, Never>?
     private var processTask: Task<Void, Never>?
     private var publicIPTask: Task<Void, Never>?
     private var publicIPAddress: String?
 
-    init(sampler: SystemStatusSampler = SystemStatusSampler()) {
+    init(sampler: any SystemStatusSampling = SystemStatusSampler()) {
         self.sampler = sampler
     }
 
@@ -171,7 +182,8 @@ struct SystemStatusComponentView: View {
         static let spacing: CGFloat = 8
     }
 
-    @StateObject private var viewModel = SystemStatusViewModel()
+    @ObservedObject var viewModel: SystemStatusViewModel
+    let isPanelVisible: Bool
 
     var body: some View {
         VStack(spacing: Layout.spacing) {
@@ -187,7 +199,11 @@ struct SystemStatusComponentView: View {
                 topProcessesCard
             }
         }
-        .onAppear { viewModel.start() }
+        .onAppear {
+            if isPanelVisible {
+                viewModel.start()
+            }
+        }
         .onDisappear { viewModel.stop() }
     }
 

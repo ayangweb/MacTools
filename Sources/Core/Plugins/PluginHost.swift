@@ -402,6 +402,14 @@ final class PluginHost: ObservableObject {
     }
 
     func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginComponentViewItem {
+        componentViewItem(for: itemID, dismiss: dismiss, isPanelVisible: true)
+    }
+
+    func componentViewItem(
+        for itemID: String,
+        dismiss: @escaping () -> Void,
+        isPanelVisible: Bool
+    ) -> PluginComponentViewItem {
         if let cachedItem = componentViewCache[itemID] {
             return cachedItem
         }
@@ -415,7 +423,11 @@ final class PluginHost: ObservableObject {
         let item = PluginComponentViewItem(
             id: itemID,
             content: plugin.makeComponentView(
-                context: PluginComponentContext(pluginID: itemID, dismiss: dismiss)
+                context: PluginComponentContext(
+                    pluginID: itemID,
+                    dismiss: dismiss,
+                    isPanelVisible: isPanelVisible
+                )
             )
         )
         componentViewCache[itemID] = item
@@ -455,10 +467,8 @@ final class PluginHost: ObservableObject {
         return item
     }
 
-    func warmComponentViews(dismiss: @escaping () -> Void) {
-        for item in componentItems {
-            _ = componentViewItem(for: item.id, dismiss: dismiss)
-        }
+    func discardComponentViews() {
+        componentViewCache.removeAll()
     }
 
     private func plugin(for pluginID: String) -> (any FeaturePlugin)? {
