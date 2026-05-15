@@ -6,6 +6,8 @@ enum AppLog {
 
     static let appearancePlugin = Logger(subsystem: subsystem, category: "AppearancePlugin")
     static let keepAwakePlugin = Logger(subsystem: subsystem, category: "KeepAwakePlugin")
+    static let middleClickPlugin = Logger(subsystem: subsystem, category: "MiddleClickPlugin")
+    static let middleClickSession = Logger(subsystem: subsystem, category: "MiddleClickSession")
     static let keepAwakeSession = Logger(subsystem: subsystem, category: "KeepAwakeSession")
     static let physicalCleanModePlugin = Logger(subsystem: subsystem, category: "PhysicalCleanModePlugin")
     static let physicalCleanModeSession = Logger(subsystem: subsystem, category: "PhysicalCleanModeSession")

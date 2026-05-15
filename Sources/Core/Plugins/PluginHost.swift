@@ -65,6 +65,7 @@ final class PluginHost: ObservableObject {
                 DisplayResolutionPlugin(),
                 HideNotchPlugin(),
                 KeepAwakePlugin(),
+                MiddleClickPlugin(),
                 DiskCleanFeature.shared.makePlugin(),
                 LaunchControlFeature.shared.makePlugin(),
                 PhysicalCleanModePlugin()

@@ -37,6 +37,8 @@ targets:
         INFOPLIST_FILE: Configs/MacTools-Info.plist
         CODE_SIGN_ENTITLEMENTS: Configs/MacTools.entitlements
         SPARKLE_PUBLIC_ED_KEY: YS4ioWunyQC5rP/YQdDbG9panyqCKNyBd0iPTUqIFY0=
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport
+        OTHER_LDFLAGS: -framework MultitouchSupport -F /System/Library/PrivateFrameworks
 
   MacToolsTests:
     type: bundle.unit-test
