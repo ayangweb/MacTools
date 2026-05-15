@@ -40,6 +40,16 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         }
     }
 
+    func testRebuildReadsPanelStateOncePerPlugin() {
+        let plugin = MockDisclosurePlugin()
+        let host = makeHost(plugin: plugin)
+        plugin.panelStateReadCount = 0
+
+        host.setDisclosureExpanded(true, for: plugin.manifest.id)
+
+        XCTAssertEqual(plugin.panelStateReadCount, 1)
+    }
+
     private func makeHost(plugin: MockDisclosurePlugin) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -71,9 +81,11 @@ private final class MockDisclosurePlugin: FeaturePlugin {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var isExpanded = false
     var errorMessage: String?
+    var panelStateReadCount = 0
 
     var panelState: PluginPanelState {
-        PluginPanelState(
+        panelStateReadCount += 1
+        return PluginPanelState(
             subtitle: "Mock plugin",
             isOn: false,
             isExpanded: isExpanded,

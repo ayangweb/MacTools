@@ -178,16 +178,28 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(componentPlugin.makeComponentViewCallCount, 1)
     }
 
-    func testWarmComponentViewsBuildsEachVisibleComponentOnce() {
+    func testDiscardComponentViewsReleasesCachedComponentContent() {
         let first = MockComponentPlugin(id: "first", order: 1)
         let second = MockComponentPlugin(id: "second", order: 2)
         let host = makeHost(componentPlugins: [first, second])
 
-        host.warmComponentViews(dismiss: {})
-        host.warmComponentViews(dismiss: {})
+        _ = host.componentViewItem(for: "first", dismiss: {})
+        _ = host.componentViewItem(for: "second", dismiss: {})
+        host.discardComponentViews()
+        _ = host.componentViewItem(for: "first", dismiss: {})
+        _ = host.componentViewItem(for: "second", dismiss: {})
 
-        XCTAssertEqual(first.makeComponentViewCallCount, 1)
-        XCTAssertEqual(second.makeComponentViewCallCount, 1)
+        XCTAssertEqual(first.makeComponentViewCallCount, 2)
+        XCTAssertEqual(second.makeComponentViewCallCount, 2)
+    }
+
+    func testComponentContextCarriesPanelVisibility() {
+        let componentPlugin = MockComponentPlugin(id: "component")
+        let host = makeHost(componentPlugins: [componentPlugin])
+
+        _ = host.componentViewItem(for: "component", dismiss: {}, isPanelVisible: false)
+
+        XCTAssertEqual(componentPlugin.receivedPanelVisibilityValues, [false])
     }
 
     func testFeaturePluginStillAppearsOnlyInPanelItems() {
@@ -199,9 +211,52 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.map(\.presentation), [.featurePanel])
     }
 
+    func testDisplayConfigurationChangeRefreshesOnlyDisplayTopologyPlugins() async throws {
+        let displayPlugin = MockDisplayTopologyPlugin(id: "display")
+        let regularPlugin = MockFeaturePlugin(id: "feature")
+        let observer = MockDisplayConfigurationObserver()
+        let host = makeHost(
+            plugins: [displayPlugin, regularPlugin],
+            displayConfigurationObserver: observer,
+            displayTopologyRefreshDelay: .milliseconds(10)
+        )
+        displayPlugin.refreshDisplayTopologyCallCount = 0
+        regularPlugin.refreshCallCount = 0
+
+        observer.triggerChange()
+
+        try await Task.sleep(for: .milliseconds(60))
+
+        XCTAssertEqual(displayPlugin.refreshDisplayTopologyCallCount, 1)
+        XCTAssertEqual(regularPlugin.refreshCallCount, 0)
+        XCTAssertEqual(host.panelItems.map(\.id), ["display", "feature"])
+    }
+
+    func testDisplayConfigurationChangesAreDebounced() async throws {
+        let displayPlugin = MockDisplayTopologyPlugin(id: "display")
+        let observer = MockDisplayConfigurationObserver()
+        let host = makeHost(
+            plugins: [displayPlugin],
+            displayConfigurationObserver: observer,
+            displayTopologyRefreshDelay: .milliseconds(20)
+        )
+        displayPlugin.refreshDisplayTopologyCallCount = 0
+
+        observer.triggerChange()
+        observer.triggerChange()
+        observer.triggerChange()
+
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertEqual(displayPlugin.refreshDisplayTopologyCallCount, 1)
+        XCTAssertEqual(host.panelItems.map(\.id), ["display"])
+    }
+
     private func makeHost(
         plugins: [any FeaturePlugin] = [],
-        componentPlugins: [any ComponentPlugin] = []
+        componentPlugins: [any ComponentPlugin] = [],
+        displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
+        displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -211,8 +266,19 @@ final class PluginHostComponentSupportTests: XCTestCase {
             componentPlugins: componentPlugins,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
-            globalShortcutManager: GlobalShortcutManager()
+            globalShortcutManager: GlobalShortcutManager(),
+            displayConfigurationObserver: displayConfigurationObserver,
+            displayTopologyRefreshDelay: displayTopologyRefreshDelay
         )
+    }
+}
+
+@MainActor
+private final class MockDisplayConfigurationObserver: DisplayConfigurationObserving {
+    var onConfigurationChange: (() -> Void)?
+
+    func triggerChange() {
+        onConfigurationChange?()
     }
 }
 
@@ -229,6 +295,7 @@ private final class MockComponentPlugin: ComponentPlugin {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private let isActive: Bool
     private(set) var makeComponentViewCallCount = 0
+    private(set) var receivedPanelVisibilityValues: [Bool] = []
 
     init(
         id: String,
@@ -268,6 +335,7 @@ private final class MockComponentPlugin: ComponentPlugin {
 
     func makeComponentView(context: PluginComponentContext) -> AnyView {
         makeComponentViewCallCount += 1
+        receivedPanelVisibilityValues.append(context.isPanelVisible)
         return AnyView(Text(context.pluginID))
     }
 
@@ -298,6 +366,7 @@ private final class MockFeaturePlugin: FeaturePlugin {
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var refreshCallCount = 0
 
     init(id: String) {
         self.manifest = PluginManifest(
@@ -328,7 +397,66 @@ private final class MockFeaturePlugin: FeaturePlugin {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    func refresh() {}
+    func refresh() {
+        refreshCallCount += 1
+    }
+    func handlePanelAction(_ action: PluginPanelAction) {}
+
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        PluginPermissionState(isGranted: true, footnote: nil)
+    }
+
+    func handlePermissionAction(id: String) {}
+    func handleSettingsAction(id: String) {}
+    func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class MockDisplayTopologyPlugin: FeaturePlugin, DisplayTopologyRefreshing {
+    let manifest: PluginManifest
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var refreshCallCount = 0
+    var refreshDisplayTopologyCallCount = 0
+
+    init(id: String) {
+        self.manifest = PluginManifest(
+            id: id,
+            title: id,
+            iconName: "display",
+            iconTint: Color(nsColor: .systemBlue),
+            controlStyle: .disclosure,
+            menuActionBehavior: .keepPresented,
+            order: 1,
+            defaultDescription: "Display \(id)"
+        )
+    }
+
+    var panelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: "Display subtitle \(refreshDisplayTopologyCallCount)",
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    var permissionRequirements: [PluginPermissionRequirement] { [] }
+    var settingsSections: [PluginSettingsSection] { [] }
+    var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    func refresh() {
+        refreshCallCount += 1
+    }
+
+    func refreshDisplayTopology() {
+        refreshDisplayTopologyCallCount += 1
+    }
+
     func handlePanelAction(_ action: PluginPanelAction) {}
 
     func permissionState(for permissionID: String) -> PluginPermissionState {

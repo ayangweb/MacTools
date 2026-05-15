@@ -50,7 +50,7 @@ final class DisplayBrightnessPluginTests: XCTestCase {
         controller.snapshotValue = DisplayBrightnessSnapshot(
             displays: [
                 makeBrightnessDisplay(id: 7, name: "Studio Display", brightness: 0.72),
-                makeBrightnessDisplay(id: 9, name: "LG UltraFine", brightness: 0.41, backendKind: .ddc)
+                makeBrightnessDisplay(id: 9, name: "LG UltraFine", brightness: 0.41)
             ],
             errorMessage: nil
         )
@@ -65,7 +65,7 @@ final class DisplayBrightnessPluginTests: XCTestCase {
         controller.snapshotValue = DisplayBrightnessSnapshot(
             displays: [
                 makeBrightnessDisplay(id: 7, name: "Studio Display", brightness: 0.72),
-                makeBrightnessDisplay(id: 9, name: "LG UltraFine", brightness: 0.41, backendKind: .ddc)
+                makeBrightnessDisplay(id: 9, name: "LG UltraFine", brightness: 0.41)
             ],
             errorMessage: nil
         )

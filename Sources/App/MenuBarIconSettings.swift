@@ -723,6 +723,17 @@ final class MenuBarIconSettings: ObservableObject {
         var recentItems: [MenuBarIconRecentItem] = []
     }
 
+    private struct RenderedFramesCacheKey: Hashable {
+        let id: UUID
+        let fileName: String
+        let frameFileNames: [String]
+    }
+
+    private struct RecentPreviewCacheKey: Hashable {
+        let id: UUID
+        let fileName: String
+    }
+
     private static let defaultIconName = NSImage.Name("MenuBarIcon")
     private static let iconPointSize = NSSize(width: 18, height: 18)
     private static let maxRecentItems = 6
@@ -736,6 +747,10 @@ final class MenuBarIconSettings: ObservableObject {
     private let rootDirectory: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var imagePayloadCache: [MenuBarIconAppearance: MenuBarIconImagePayload] = [:]
+    private var renderedFramesCache: [RenderedFramesCacheKey: [NSImage]] = [:]
+    private var recentPreviewCache: [RecentPreviewCacheKey: NSImage] = [:]
+    private var contrastReportCache: [MenuBarIconAppearance: MenuBarIconContrastReport] = [:]
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -761,6 +776,7 @@ final class MenuBarIconSettings: ObservableObject {
             }
 
             storedState.renderMode = newValue
+            invalidateSelectedIconCaches()
             persist()
         }
     }
@@ -781,6 +797,7 @@ final class MenuBarIconSettings: ObservableObject {
             }
 
             storedState.animationSpeedMode = newValue
+            invalidateImagePayloadCache()
             persist()
         }
     }
@@ -794,6 +811,7 @@ final class MenuBarIconSettings: ObservableObject {
             }
 
             storedState.manualAnimationSpeedMultiplier = normalizedValue
+            invalidateImagePayloadCache()
             persist()
         }
     }
@@ -840,6 +858,7 @@ final class MenuBarIconSettings: ObservableObject {
         storeRecentItem(recentItem)
         setIconFileNameForAllAppearances(recentFileName)
         resetAdjustmentsForAllAppearances()
+        invalidateAllIconCaches()
         persist()
     }
 
@@ -892,6 +911,7 @@ final class MenuBarIconSettings: ObservableObject {
         storeRecentItem(recentItem)
         setIconFileNameForAllAppearances(recentItem.fileName)
         resetAdjustmentsForAllAppearances()
+        invalidateAllIconCaches()
         persist()
     }
 
@@ -931,6 +951,7 @@ final class MenuBarIconSettings: ObservableObject {
         storeRecentItem(recentItem)
         setIconFileNameForAllAppearances(recentItem.fileName)
         resetAdjustmentsForAllAppearances()
+        invalidateAllIconCaches()
         persist()
     }
 
@@ -948,6 +969,7 @@ final class MenuBarIconSettings: ObservableObject {
 
         setIconFileNameForAllAppearances(item.fileName)
         resetAdjustmentsForAllAppearances()
+        invalidateSelectedIconCaches()
         persist()
     }
 
@@ -956,11 +978,66 @@ final class MenuBarIconSettings: ObservableObject {
         storedState.darkIconFileName = nil
         storedState.lightAdjustment = .default
         storedState.darkAdjustment = .default
+        invalidateSelectedIconCaches()
         persist()
     }
 
     func imagePayload(for appearance: NSAppearance? = nil) -> MenuBarIconImagePayload {
         let resolvedAppearance = resolvedAppearance(from: appearance)
+        return imagePayload(for: resolvedAppearance)
+    }
+
+    func previewImage(for appearance: MenuBarIconAppearance) -> NSImage {
+        imagePayload(for: appearance).image
+    }
+
+    func previewImage(for recentItem: MenuBarIconRecentItem) -> NSImage {
+        let cacheKey = RecentPreviewCacheKey(id: recentItem.id, fileName: recentItem.fileName)
+        if let cachedImage = recentPreviewCache[cacheKey] {
+            return cachedImage
+        }
+
+        let image = renderedImage(fileName: recentItem.fileName) ?? Self.defaultImage()
+        recentPreviewCache[cacheKey] = image
+        return image
+    }
+
+    func previewImage(for builtInAnimation: MenuBarIconBuiltInAnimation) -> NSImage {
+        guard
+            let sourceImage = builtInAnimation.loadFirstFrame(),
+            let image = MenuBarIconProcessing.renderedImage(from: sourceImage, adjustment: .default)
+        else {
+            return Self.defaultImage()
+        }
+
+        return image
+    }
+
+    func contrastReport(for appearance: MenuBarIconAppearance) -> MenuBarIconContrastReport {
+        if let cachedReport = contrastReportCache[appearance] {
+            return cachedReport
+        }
+
+        let report = MenuBarIconProcessing.contrastReport(for: previewImage(for: appearance))
+        contrastReportCache[appearance] = report
+        return report
+    }
+
+    func clearError() {
+        lastErrorMessage = nil
+    }
+
+    private func imagePayload(for resolvedAppearance: MenuBarIconAppearance) -> MenuBarIconImagePayload {
+        if let cachedPayload = imagePayloadCache[resolvedAppearance] {
+            return cachedPayload
+        }
+
+        let payload = makeImagePayload(for: resolvedAppearance)
+        imagePayloadCache[resolvedAppearance] = payload
+        return payload
+    }
+
+    private func makeImagePayload(for resolvedAppearance: MenuBarIconAppearance) -> MenuBarIconImagePayload {
         guard let item = selectedRecentItem(for: resolvedAppearance) else {
             let image = Self.defaultImage()
             image.isTemplate = true
@@ -974,7 +1051,7 @@ final class MenuBarIconSettings: ObservableObject {
             )
         }
 
-        let frames = renderedImages(for: item, appearance: resolvedAppearance)
+        let frames = renderedImages(for: item)
         guard let image = frames.first else {
             let image = Self.defaultImage()
             image.isTemplate = true
@@ -1001,45 +1078,6 @@ final class MenuBarIconSettings: ObservableObject {
             speedMode: animationSpeedMode,
             manualSpeedMultiplier: manualAnimationSpeedMultiplier
         )
-    }
-
-    func previewImage(for appearance: MenuBarIconAppearance) -> NSImage {
-        guard let item = selectedRecentItem(for: appearance) else {
-            return Self.defaultImage()
-        }
-
-        return renderedImages(for: item, appearance: appearance).first ?? Self.defaultImage()
-    }
-
-    func previewImage(for recentItem: MenuBarIconRecentItem) -> NSImage {
-        let url = recentsDirectory.appendingPathComponent(recentItem.fileName)
-        guard
-            let sourceImage = NSImage(contentsOf: url),
-            let image = MenuBarIconProcessing.renderedImage(from: sourceImage, adjustment: .default)
-        else {
-            return Self.defaultImage()
-        }
-
-        return image
-    }
-
-    func previewImage(for builtInAnimation: MenuBarIconBuiltInAnimation) -> NSImage {
-        guard
-            let sourceImage = builtInAnimation.loadFirstFrame(),
-            let image = MenuBarIconProcessing.renderedImage(from: sourceImage, adjustment: .default)
-        else {
-            return Self.defaultImage()
-        }
-
-        return image
-    }
-
-    func contrastReport(for appearance: MenuBarIconAppearance) -> MenuBarIconContrastReport {
-        MenuBarIconProcessing.contrastReport(for: previewImage(for: appearance))
-    }
-
-    func clearError() {
-        lastErrorMessage = nil
     }
 
     private var iconsDirectory: URL {
@@ -1094,24 +1132,34 @@ final class MenuBarIconSettings: ObservableObject {
         }
     }
 
-    private func renderedImages(
-        for item: MenuBarIconRecentItem,
-        appearance: MenuBarIconAppearance
-    ) -> [NSImage] {
-        let frameFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
-        return frameFileNames.compactMap { fileName in
-            let url = recentsDirectory.appendingPathComponent(fileName)
-            guard let sourceImage = NSImage(contentsOf: url) else {
-                return nil
-            }
-
-            let image = MenuBarIconProcessing.renderedImage(
-                from: sourceImage,
-                adjustment: .default
-            ) ?? sourceImage
-            image.size = Self.iconPointSize
-            return image
+    private func renderedImages(for item: MenuBarIconRecentItem) -> [NSImage] {
+        let cacheKey = RenderedFramesCacheKey(
+            id: item.id,
+            fileName: item.fileName,
+            frameFileNames: item.frameFileNames
+        )
+        if let cachedImages = renderedFramesCache[cacheKey] {
+            return cachedImages
         }
+
+        let frameFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
+        let images = frameFileNames.compactMap(renderedImage(fileName:))
+        renderedFramesCache[cacheKey] = images
+        return images
+    }
+
+    private func renderedImage(fileName: String) -> NSImage? {
+        let url = recentsDirectory.appendingPathComponent(fileName)
+        guard let sourceImage = NSImage(contentsOf: url) else {
+            return nil
+        }
+
+        let image = MenuBarIconProcessing.renderedImage(
+            from: sourceImage,
+            adjustment: .default
+        ) ?? sourceImage
+        image.size = Self.iconPointSize
+        return image
     }
 
     private func iconSelection(for appearance: MenuBarIconAppearance) -> (fileName: String, appearance: MenuBarIconAppearance)? {
@@ -1201,6 +1249,22 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         storedState.recentItems = items
+        invalidateAllIconCaches()
         persist()
+    }
+
+    private func invalidateImagePayloadCache() {
+        imagePayloadCache.removeAll()
+    }
+
+    private func invalidateSelectedIconCaches() {
+        imagePayloadCache.removeAll()
+        contrastReportCache.removeAll()
+    }
+
+    private func invalidateAllIconCaches() {
+        invalidateSelectedIconCaches()
+        renderedFramesCache.removeAll()
+        recentPreviewCache.removeAll()
     }
 }

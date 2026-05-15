@@ -150,6 +150,7 @@ struct PluginComponentState {
 struct PluginComponentContext {
     let pluginID: String
     let dismiss: () -> Void
+    let isPanelVisible: Bool
 }
 
 struct PluginComponentViewItem: Identifiable {

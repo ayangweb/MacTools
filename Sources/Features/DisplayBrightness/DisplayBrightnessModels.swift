@@ -11,7 +11,6 @@ enum DisplayBrightnessBackendKind: Equatable {
 struct DisplayBrightnessDisplay: Identifiable, Equatable {
     let display: DisplayInfo
     let brightness: Double
-    let backendKind: DisplayBrightnessBackendKind
     let isPendingWrite: Bool
 
     var id: CGDirectDisplayID { display.id }
@@ -75,4 +74,20 @@ protocol DisplayBrightnessBackendBuilding {
         for displays: [DisplayInfo],
         previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
     ) -> [CGDirectDisplayID: any DisplayBrightnessBackend]
+
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)?
+}
+
+extension DisplayBrightnessBackendBuilding {
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        nil
+    }
 }

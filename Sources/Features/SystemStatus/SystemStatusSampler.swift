@@ -4,7 +4,14 @@ import IOKit
 import IOKit.ps
 import SystemConfiguration
 
-actor SystemStatusSampler {
+protocol SystemStatusSampling: Sendable {
+    func collectFast(referenceDate: Date) async -> SystemStatusFastSample
+    func collectSlow() async -> SystemStatusSlowSample
+    func collectTopProcesses(limit: Int) async -> [SystemStatusTopProcess]
+    func collectPublicIPAddress() async -> String?
+}
+
+actor SystemStatusSampler: SystemStatusSampling {
     private var previousCPUTicks: SystemStatusCPUTicks?
     private var previousCPUPowerEnergy: SystemStatusPowerEnergySample?
     private var cachedCPUTemperature: Double?
@@ -23,14 +30,14 @@ actor SystemStatusSampler {
         )
     }
 
-    func collectSlow() -> SystemStatusSlowSample {
+    func collectSlow() async -> SystemStatusSlowSample {
         SystemStatusSlowSample(
             disk: Self.collectDiskCapacity(),
             battery: Self.collectBattery()
         )
     }
 
-    func collectTopProcesses(limit: Int = 3) -> [SystemStatusTopProcess] {
+    func collectTopProcesses(limit: Int = 3) async -> [SystemStatusTopProcess] {
         Self.collectTopProcesses(limit: limit)
     }
 

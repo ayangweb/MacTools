@@ -33,7 +33,6 @@ final class MenuBarStatusItemController: NSObject {
     private var globalEventMonitor: Any?
     private var appActivationObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
-    private var refreshAfterPresentationTask: Task<Void, Never>?
     private var animationTimer: DispatchSourceTimer?
     private var animationLoadSampleTimer: Timer?
     private let animationLoadMonitor = MenuBarIconAnimationLoadMonitor()
@@ -89,8 +88,6 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     func dismissPanels() {
-        refreshAfterPresentationTask?.cancel()
-        refreshAfterPresentationTask = nil
         panelPresenter.dismissPanels()
         removeDismissMonitorsIfNeeded()
     }
@@ -235,10 +232,7 @@ final class MenuBarStatusItemController: NSObject {
         }
 
         animationFrameIndex = (animationFrameIndex + 1) % animationFrames.count
-        let frame = animationFrames[animationFrameIndex]
-        let displayFrame = frame.copy() as? NSImage ?? frame
-        displayFrame.isTemplate = frame.isTemplate
-        button.image = displayFrame
+        button.image = animationFrames[animationFrameIndex]
         button.needsDisplay = true
     }
 
@@ -264,13 +258,10 @@ final class MenuBarStatusItemController: NSObject {
 
     private func handlePresentationResult() {
         guard panelPresenter.isAnyPanelShown else {
-            refreshAfterPresentationTask?.cancel()
-            refreshAfterPresentationTask = nil
             return
         }
 
         installDismissMonitorsIfNeeded()
-        refreshAfterPresentation()
     }
 
     private func installDismissMonitorsIfNeeded() {
@@ -312,9 +303,6 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func removeDismissMonitorsIfNeeded() {
-        refreshAfterPresentationTask?.cancel()
-        refreshAfterPresentationTask = nil
-
         if let localEventMonitor {
             NSEvent.removeMonitor(localEventMonitor)
             self.localEventMonitor = nil
@@ -375,23 +363,4 @@ final class MenuBarStatusItemController: NSObject {
         return activatedApplication.processIdentifier == ProcessInfo.processInfo.processIdentifier
     }
 
-    private func refreshAfterPresentation() {
-        refreshAfterPresentationTask?.cancel()
-        refreshAfterPresentationTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: .milliseconds(140))
-            } catch {
-                return
-            }
-
-            guard
-                !Task.isCancelled,
-                self?.panelPresenter.isAnyPanelShown == true
-            else {
-                return
-            }
-
-            self?.pluginHost.refreshAll()
-        }
-    }
 }

@@ -27,13 +27,11 @@ func makeBrightnessDisplay(
     id: CGDirectDisplayID,
     name: String,
     brightness: Double,
-    backendKind: DisplayBrightnessBackendKind = .appleNative,
     isPendingWrite: Bool = false
 ) -> DisplayBrightnessDisplay {
     DisplayBrightnessDisplay(
         display: makeTestDisplay(id: id, name: name),
         brightness: brightness,
-        backendKind: backendKind,
         isPendingWrite: isPendingWrite
     )
 }
@@ -47,7 +45,10 @@ final class MockDisplayBrightnessController: DisplayBrightnessControlling {
     }
 
     var onStateChange: (() -> Void)?
-    var snapshotValue = DisplayBrightnessSnapshot(displays: [], errorMessage: nil)
+    var snapshotValue = DisplayBrightnessSnapshot(
+        displays: [],
+        errorMessage: nil
+    )
     var refreshCount = 0
     var setBrightnessCalls: [SetBrightnessCall] = []
 
@@ -91,12 +92,23 @@ final class StubBrightnessBackendBuilder: DisplayBrightnessBackendBuilding {
         [DisplayInfo],
         [CGDirectDisplayID: any DisplayBrightnessBackend]
     ) -> [CGDirectDisplayID: any DisplayBrightnessBackend]
+    typealias FallbackHandler = (
+        any DisplayBrightnessBackend,
+        DisplayInfo,
+        [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)?
 
     var handler: BuildHandler
+    var fallbackHandler: FallbackHandler
     private(set) var calls: [[DisplayInfo]] = []
+    private(set) var fallbackCalls: [(DisplayBrightnessBackendKind, DisplayInfo)] = []
 
-    init(handler: @escaping BuildHandler = { _, _ in [:] }) {
+    init(
+        handler: @escaping BuildHandler = { _, _ in [:] },
+        fallbackHandler: @escaping FallbackHandler = { _, _, _ in nil }
+    ) {
         self.handler = handler
+        self.fallbackHandler = fallbackHandler
     }
 
     func backends(
@@ -106,6 +118,15 @@ final class StubBrightnessBackendBuilder: DisplayBrightnessBackendBuilding {
         calls.append(displays)
         return handler(displays, previous)
     }
+
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        fallbackCalls.append((failedBackend.kind, display))
+        return fallbackHandler(failedBackend, display, previous)
+    }
 }
 
 final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable {
@@ -114,7 +135,6 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
 
     var writeDelay: TimeInterval = 0
     var blockFirstWrite = false
-    let firstWriteStarted = DispatchSemaphore(value: 0)
     let allowFirstWriteToFinish = DispatchSemaphore(value: 0)
 
     private let lock = NSLock()
@@ -123,8 +143,10 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
     private var recordedWritesStorage: [Double] = []
     private var cleanupCountStorage = 0
     private var writeCountStorage = 0
+    private var readCountStorage = 0
     private var activeWrites = 0
     private var maxConcurrentWritesStorage = 0
+    private var storedBrightnessAfterWrite: Double?
 
     init(
         kind: DisplayBrightnessBackendKind,
@@ -148,6 +170,10 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         lock.withLock { writeCountStorage }
     }
 
+    var readCount: Int {
+        lock.withLock { readCountStorage }
+    }
+
     var maxConcurrentWrites: Int {
         lock.withLock { maxConcurrentWritesStorage }
     }
@@ -158,8 +184,17 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         }
     }
 
+    func setStoredBrightnessAfterWrite(_ value: Double?) {
+        lock.withLock {
+            storedBrightnessAfterWrite = value
+        }
+    }
+
     func readBrightness() throws -> Double {
-        lock.withLock { storedBrightness }
+        lock.withLock {
+            readCountStorage += 1
+            return storedBrightness
+        }
     }
 
     func writeBrightness(_ value: Double) throws {
@@ -178,7 +213,6 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         }
 
         if shouldBlock {
-            firstWriteStarted.signal()
             allowFirstWriteToFinish.wait()
         }
 
@@ -193,7 +227,7 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
         }
 
         lock.withLock {
-            storedBrightness = value
+            storedBrightness = storedBrightnessAfterWrite ?? value
         }
     }
 

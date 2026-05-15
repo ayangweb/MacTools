@@ -3,7 +3,12 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class DisplayBrightnessPlugin: FeaturePlugin {
+final class DisplayBrightnessPlugin: FeaturePlugin, DisplayTopologyRefreshing {
+    private enum Constants {
+        static let displayControlPrefix = "display."
+        static let brightnessControlSuffix = ".brightness"
+    }
+
     let manifest = PluginManifest(
         id: "display-brightness",
         title: "显示器亮度",
@@ -64,15 +69,14 @@ final class DisplayBrightnessPlugin: FeaturePlugin {
         controller.refresh()
     }
 
+    func refreshDisplayTopology() {
+        controller.refresh()
+    }
+
     func handlePanelAction(_ action: PluginPanelAction) {
         switch action {
         case let .setDisclosureExpanded(value):
             isExpanded = value
-
-            if value {
-                controller.refresh()
-            }
-
             onStateChange?()
         case let .setSlider(controlID, value, phase):
             guard let displayID = Self.parseDisplayID(from: controlID) else {
@@ -103,18 +107,21 @@ final class DisplayBrightnessPlugin: FeaturePlugin {
     func handleShortcutAction(id: String) {}
 
     static func parseDisplayID(from controlID: String) -> CGDirectDisplayID? {
-        let prefix = "display."
-        let suffix = ".brightness"
-
         guard
-            controlID.hasPrefix(prefix),
-            controlID.hasSuffix(suffix)
+            controlID.hasPrefix(Constants.displayControlPrefix),
+            controlID.hasSuffix(Constants.brightnessControlSuffix)
         else {
             return nil
         }
 
-        let startIndex = controlID.index(controlID.startIndex, offsetBy: prefix.count)
-        let endIndex = controlID.index(controlID.endIndex, offsetBy: -suffix.count)
+        let startIndex = controlID.index(
+            controlID.startIndex,
+            offsetBy: Constants.displayControlPrefix.count
+        )
+        let endIndex = controlID.index(
+            controlID.endIndex,
+            offsetBy: -Constants.brightnessControlSuffix.count
+        )
         return CGDirectDisplayID(controlID[startIndex..<endIndex])
     }
 
@@ -130,7 +137,7 @@ final class DisplayBrightnessPlugin: FeaturePlugin {
         PluginPanelDetail(
             primaryControls: displays.map { display in
                 PluginPanelControl(
-                    id: "display.\(display.display.id).brightness",
+                    id: "\(Constants.displayControlPrefix)\(display.display.id)\(Constants.brightnessControlSuffix)",
                     kind: .slider,
                     options: [],
                     selectedOptionID: nil,

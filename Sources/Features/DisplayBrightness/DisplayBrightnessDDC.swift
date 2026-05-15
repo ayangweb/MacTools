@@ -10,6 +10,11 @@ private enum DDCBrightnessControl {
     static let displayAddress: UInt8 = 0x6E
     static let displayReplyAddress: UInt8 = 0x6F
     static let arm64DisplayAddress7Bit: UInt8 = 0x37
+    static let writeCycleCount = 2
+    static let retryCount = 3
+    static let writeDelay: useconds_t = 40_000
+    static let readDelay: useconds_t = 50_000
+    static let retryDelay: useconds_t = 20_000
 }
 
 struct DDCBrightnessValue {
@@ -22,6 +27,10 @@ protocol DDCBrightnessTransport {
     func writeBrightness(_ value: UInt16) throws
 }
 
+private enum DDCCommunicationQueue {
+    static let shared = DispatchQueue(label: "MacTools.DisplayBrightness.DDC")
+}
+
 final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
     private let display: DisplayInfo
     private let framebuffer: io_service_t
@@ -29,17 +38,26 @@ final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
 
     init?(display: DisplayInfo) {
         guard let framebuffer = Self.framebufferPort(for: display.id) else {
+            AppLog.displayBrightnessBackend.info(
+                "DDC Intel transport unavailable for \(display.name, privacy: .public): no framebuffer service"
+            )
             return nil
         }
 
         guard let replyTransactionType = Self.supportedReplyTransactionType() else {
             IOObjectRelease(framebuffer)
+            AppLog.displayBrightnessBackend.info(
+                "DDC Intel transport unavailable for \(display.name, privacy: .public): no supported I2C reply transaction type"
+            )
             return nil
         }
 
         self.display = display
         self.framebuffer = framebuffer
         self.replyTransactionType = replyTransactionType
+        AppLog.displayBrightnessBackend.debug(
+            "DDC Intel transport ready for \(display.name, privacy: .public)"
+        )
     }
 
     deinit {
@@ -47,6 +65,38 @@ final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
     }
 
     func readBrightness() throws -> DDCBrightnessValue {
+        try DDCCommunicationQueue.shared.sync {
+            var lastError: Error?
+
+            for _ in 0..<DDCBrightnessControl.retryCount {
+                do {
+                    return try performRead()
+                } catch {
+                    lastError = error
+                    usleep(DDCBrightnessControl.retryDelay)
+                }
+            }
+
+            throw lastError ?? DisplayBrightnessControllerError.i2cUnavailable(displayName: display.name)
+        }
+    }
+
+    func writeBrightness(_ value: UInt16) throws {
+        try DDCCommunicationQueue.shared.sync {
+            var didWrite = false
+
+            for _ in 0..<DDCBrightnessControl.writeCycleCount {
+                usleep(DDCBrightnessControl.writeDelay)
+                didWrite = performWrite(value) || didWrite
+            }
+
+            guard didWrite else {
+                throw DisplayBrightnessControllerError.failed(message: "\(display.name) DDC 写入失败")
+            }
+        }
+    }
+
+    private func performRead() throws -> DDCBrightnessValue {
         var command = [
             DDCBrightnessControl.hostAddress,
             0x82,
@@ -80,7 +130,7 @@ final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
         return try Self.parseReply(reply, displayName: display.name)
     }
 
-    func writeBrightness(_ value: UInt16) throws {
+    private func performWrite(_ value: UInt16) -> Bool {
         var command = [
             DDCBrightnessControl.hostAddress,
             0x84,
@@ -102,9 +152,7 @@ final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
         request.replyTransactionType = IOOptionBits(kIOI2CNoTransactionType)
         request.replyBytes = 0
 
-        guard Self.send(request: &request, to: framebuffer) else {
-            throw DisplayBrightnessControllerError.failed(message: "\(display.name) DDC 写入失败")
-        }
+        return Self.send(request: &request, to: framebuffer)
     }
 
     static func parseReply(
@@ -212,6 +260,10 @@ final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
     }
 
     private static func framebufferPort(for displayID: CGDirectDisplayID) -> io_service_t? {
+        if let cgsService = PrivateDDCBridge.framebufferService(for: displayID) {
+            return cgsService
+        }
+
         var iterator = io_iterator_t()
         guard IOServiceGetMatchingServices(
             kIOMainPortDefault,
@@ -256,28 +308,38 @@ final class Arm64DDCTransport: DDCBrightnessTransport, @unchecked Sendable {
         guard
             let service = matchedService ?? PrivateDDCBridge.createService(for: display.id)
         else {
+            AppLog.displayBrightnessBackend.info(
+                "DDC ARM64 transport unavailable for \(display.name, privacy: .public): no IOAV service"
+            )
             return nil
         }
 
         self.display = display
         self.service = service
+        AppLog.displayBrightnessBackend.debug(
+            "DDC ARM64 transport ready for \(display.name, privacy: .public)"
+        )
     }
 
     func readBrightness() throws -> DDCBrightnessValue {
-        var payload = [DDCBrightnessControl.brightness]
-        var reply = Array(repeating: UInt8.zero, count: 11)
-        try performCommunication(send: &payload, reply: &reply)
-        return try IntelDDCTransport.parseReply(reply, displayName: display.name)
+        try DDCCommunicationQueue.shared.sync {
+            var payload = [DDCBrightnessControl.brightness]
+            var reply = Array(repeating: UInt8.zero, count: 11)
+            try performCommunication(send: &payload, reply: &reply)
+            return try IntelDDCTransport.parseReply(reply, displayName: display.name)
+        }
     }
 
     func writeBrightness(_ value: UInt16) throws {
-        var payload = [
-            DDCBrightnessControl.brightness,
-            UInt8(value >> 8),
-            UInt8(value & 0xFF)
-        ]
-        var reply: [UInt8] = []
-        try performCommunication(send: &payload, reply: &reply)
+        try DDCCommunicationQueue.shared.sync {
+            var payload = [
+                DDCBrightnessControl.brightness,
+                UInt8(value >> 8),
+                UInt8(value & 0xFF)
+            ]
+            var reply: [UInt8] = []
+            try performCommunication(send: &payload, reply: &reply)
+        }
     }
 
     private func performCommunication(send: inout [UInt8], reply: inout [UInt8]) throws {
@@ -287,29 +349,42 @@ final class Arm64DDCTransport: DDCBrightnessTransport, @unchecked Sendable {
             : (DDCBrightnessControl.arm64DisplayAddress7Bit << 1) ^ DDCBrightnessControl.hostAddress
         packet[packet.count - 1] = packet.dropLast().reduce(seed, ^)
 
-        guard PrivateDDCBridge.writeI2C(
-            service: service,
-            address: UInt32(DDCBrightnessControl.arm64DisplayAddress7Bit),
-            dataAddress: UInt32(DDCBrightnessControl.hostAddress),
-            bytes: &packet
-        ) == KERN_SUCCESS else {
-            throw DisplayBrightnessControllerError.i2cUnavailable(displayName: display.name)
+        var didWrite = false
+        for _ in 0..<DDCBrightnessControl.writeCycleCount {
+            usleep(DDCBrightnessControl.writeDelay)
+            if PrivateDDCBridge.writeI2C(
+                service: service,
+                address: UInt32(DDCBrightnessControl.arm64DisplayAddress7Bit),
+                dataAddress: UInt32(DDCBrightnessControl.hostAddress),
+                bytes: &packet
+            ) == KERN_SUCCESS {
+                didWrite = true
+            }
+        }
+
+        guard didWrite else {
+            throw DisplayBrightnessControllerError.failed(message: "\(display.name) DDC 写入失败")
         }
 
         guard !reply.isEmpty else {
             return
         }
 
-        usleep(50_000)
+        for _ in 0..<DDCBrightnessControl.retryCount {
+            usleep(DDCBrightnessControl.readDelay)
+            if PrivateDDCBridge.readI2C(
+                service: service,
+                address: UInt32(DDCBrightnessControl.arm64DisplayAddress7Bit),
+                dataAddress: 0,
+                bytes: &reply
+            ) == KERN_SUCCESS {
+                return
+            }
 
-        guard PrivateDDCBridge.readI2C(
-            service: service,
-            address: UInt32(DDCBrightnessControl.arm64DisplayAddress7Bit),
-            dataAddress: 0,
-            bytes: &reply
-        ) == KERN_SUCCESS else {
-            throw DisplayBrightnessControllerError.i2cUnavailable(displayName: display.name)
+            usleep(DDCBrightnessControl.retryDelay)
         }
+
+        throw DisplayBrightnessControllerError.i2cUnavailable(displayName: display.name)
     }
 }
 
@@ -319,6 +394,9 @@ enum Arm64DDCServiceMatcher {
         let name: String?
         let vendorNumber: UInt32?
         let serialNumber: UInt32?
+        let productID: UInt32?
+        let manufactureYear: UInt32?
+        let manufactureWeek: UInt32?
         let location: String?
         let ioDisplayLocation: String?
         let edidUUID: String?
@@ -329,6 +407,9 @@ enum Arm64DDCServiceMatcher {
             name: String? = nil,
             vendorNumber: UInt32? = nil,
             serialNumber: UInt32? = nil,
+            productID: UInt32? = nil,
+            manufactureYear: UInt32? = nil,
+            manufactureWeek: UInt32? = nil,
             location: String? = nil,
             ioDisplayLocation: String? = nil,
             edidUUID: String? = nil,
@@ -338,6 +419,9 @@ enum Arm64DDCServiceMatcher {
             self.name = name
             self.vendorNumber = vendorNumber
             self.serialNumber = serialNumber
+            self.productID = productID
+            self.manufactureYear = manufactureYear
+            self.manufactureWeek = manufactureWeek
             self.location = location
             self.ioDisplayLocation = ioDisplayLocation
             self.edidUUID = edidUUID
@@ -374,7 +458,40 @@ enum Arm64DDCServiceMatcher {
             usedCandidateIndexes.insert(match.candidateIndex)
         }
 
+        assignRemainingServicesByStableOrder(
+            displays: displays.filter { !$0.isBuiltin },
+            candidates: candidates,
+            matches: &matches,
+            usedCandidateIndexes: usedCandidateIndexes
+        )
+
         return matches
+    }
+
+    private static func assignRemainingServicesByStableOrder(
+        displays: [DisplayInfo],
+        candidates: [CandidateService],
+        matches: inout [CGDirectDisplayID: CFTypeRef],
+        usedCandidateIndexes: Set<Int>
+    ) {
+        let unmatchedDisplays = displays
+            .filter { matches[$0.id] == nil }
+            .sorted(by: stableDisplaySort)
+        let unusedCandidates = candidates.indices
+            .filter { !usedCandidateIndexes.contains($0) && isExternalCandidate(candidates[$0]) }
+            .map { candidates[$0] }
+            .sorted(by: stableCandidateSort)
+
+        guard
+            !unmatchedDisplays.isEmpty,
+            unmatchedDisplays.count == unusedCandidates.count
+        else {
+            return
+        }
+
+        for (display, candidate) in zip(unmatchedDisplays, unusedCandidates) {
+            matches[display.id] = candidate.service
+        }
     }
 
     private static func discoverCandidates() -> [CandidateService] {
@@ -411,28 +528,35 @@ enum Arm64DDCServiceMatcher {
                 continue
             }
 
-            let attributes = searchedProperty(
+            let nearbyDisplayProperties = nearbyDisplayProperties(for: service) ?? [:]
+            let serviceDisplayAttributes = searchedProperty(
                 key: "DisplayAttributes",
                 service: service
             ) as? [String: Any]
-            let productAttributes = attributes?["ProductAttributes"] as? [String: Any]
+            let displayAttributes = serviceDisplayAttributes ?? nearbyDisplayProperties["DisplayAttributes"] as? [String: Any]
+            let productAttributes = displayAttributes?["ProductAttributes"] as? [String: Any]
 
             serviceLocation += 1
             result.append(
                 CandidateService(
                     service: avService,
                     name: productAttributes?["ProductName"] as? String,
-                    vendorNumber: numericValue(productAttributes?["ManufacturerID"]),
+                    vendorNumber: numericValue(productAttributes?["LegacyManufacturerID"])
+                        ?? numericValue(productAttributes?["ManufacturerID"]),
                     serialNumber: numericValue(productAttributes?["SerialNumber"]),
+                    productID: numericValue(productAttributes?["ProductID"]),
+                    manufactureYear: numericValue(productAttributes?["YearOfManufacture"]),
+                    manufactureWeek: numericValue(productAttributes?["WeekOfManufacture"]),
                     location: location,
-                    ioDisplayLocation: searchedProperty(
+                    ioDisplayLocation: (searchedProperty(
                         key: kIODisplayLocationKey,
                         service: service
-                    ) as? String,
-                    edidUUID: searchedProperty(
+                    ) as? String) ?? servicePathKey(for: service),
+                    edidUUID: (searchedProperty(
                         key: "EDID UUID",
                         service: service
-                    ) as? String,
+                    ) as? String) ?? nearbyDisplayProperties["EDID UUID"] as? String
+                        ?? nearbyDisplayProperties["IOMFBUUID"] as? String,
                     serviceLocation: serviceLocation
                 )
             )
@@ -458,7 +582,7 @@ enum Arm64DDCServiceMatcher {
             for index in candidates.indices {
                 let candidate = candidates[index]
                 let score = matchScore(display: display, candidate: candidate)
-                guard score >= 2 else {
+                guard score >= 4 else {
                     continue
                 }
 
@@ -486,10 +610,40 @@ enum Arm64DDCServiceMatcher {
         }
     }
 
+    private static func stableDisplaySort(_ lhs: DisplayInfo, _ rhs: DisplayInfo) -> Bool {
+        let lhsLocation = displayLocation(for: lhs.id) ?? ""
+        let rhsLocation = displayLocation(for: rhs.id) ?? ""
+
+        if lhsLocation != rhsLocation {
+            return lhsLocation < rhsLocation
+        }
+
+        return lhs.id < rhs.id
+    }
+
+    private static func isExternalCandidate(_ candidate: CandidateService) -> Bool {
+        guard let location = candidate.location?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+
+        return location.localizedCaseInsensitiveCompare("External") == .orderedSame
+    }
+
+    private static func stableCandidateSort(_ lhs: CandidateService, _ rhs: CandidateService) -> Bool {
+        let lhsLocation = lhs.ioDisplayLocation ?? ""
+        let rhsLocation = rhs.ioDisplayLocation ?? ""
+
+        if lhsLocation != rhsLocation {
+            return lhsLocation < rhsLocation
+        }
+
+        return lhs.serviceLocation < rhs.serviceLocation
+    }
+
     private static func matchScore(display: DisplayInfo, candidate: CandidateService) -> Int {
         var score = 0
 
-        if let displayLocation = displayInfoDictionary(for: display.id)?[kIODisplayLocationKey] as? String,
+        if let displayLocation = displayLocation(for: display.id),
            let candidateLocation = candidate.ioDisplayLocation,
            !displayLocation.isEmpty,
            displayLocation == candidateLocation {
@@ -499,7 +653,7 @@ enum Arm64DDCServiceMatcher {
         score += edidMatchScore(displayID: display.id, edidUUID: candidate.edidUUID)
 
         if let serialNumber = display.serialNumber, serialNumber != 0, serialNumber == candidate.serialNumber {
-            score += 4
+            score += 10
         }
 
         if let vendorNumber = display.vendorNumber,
@@ -507,6 +661,14 @@ enum Arm64DDCServiceMatcher {
            vendorNumber == candidateVendorNumber {
             score += 3
         }
+
+        if let modelNumber = display.modelNumber,
+           let productID = candidate.productID,
+           modelNumber == productID {
+            score += 6
+        }
+
+        score += displayAttributesMatchScore(displayID: display.id, candidate: candidate)
 
         if let name = candidate.name,
            normalizedDisplayName(name) == normalizedDisplayName(display.name) {
@@ -534,27 +696,70 @@ enum Arm64DDCServiceMatcher {
 
         if let vendorID = dictionary[kDisplayVendorID] as? Int64,
            uuidToken(UInt16(clamping: vendorID), byteSwapped: false).map({ uppercaseUUID.hasPrefix($0) }) == true {
-            score += 1
+            score += 2
         }
 
         if let productID = dictionary[kDisplayProductID] as? Int64,
            let token = uuidToken(UInt16(clamping: productID), byteSwapped: true),
            uppercaseUUID.contains(token) {
-            score += 1
+            score += 2
         }
 
         if let week = dictionary[kDisplayWeekOfManufacture] as? Int64,
            let year = dictionary[kDisplayYearOfManufacture] as? Int64,
            let token = manufactureDateToken(week: week, year: year),
            uppercaseUUID.contains(token) {
-            score += 1
+            score += 2
         }
 
         if let horizontalSize = dictionary[kDisplayHorizontalImageSize] as? Int64,
            let verticalSize = dictionary[kDisplayVerticalImageSize] as? Int64,
            let token = imageSizeToken(horizontal: horizontalSize, vertical: verticalSize),
            uppercaseUUID.contains(token) {
-            score += 1
+            score += 2
+        }
+
+        return score
+    }
+
+    private static func displayAttributesMatchScore(
+        displayID: CGDirectDisplayID,
+        candidate: CandidateService
+    ) -> Int {
+        guard let dictionary = displayInfoDictionary(for: displayID) else {
+            return 0
+        }
+
+        var score = 0
+
+        if let serialNumber = dictionary[kDisplaySerialNumber] as? Int64,
+           serialNumber > 0,
+           UInt32(clamping: serialNumber) == candidate.serialNumber {
+            score += 10
+        }
+
+        if let vendorID = dictionary[kDisplayVendorID] as? Int64,
+           vendorID > 0,
+           UInt32(clamping: vendorID) == candidate.vendorNumber {
+            score += 3
+        }
+
+        if let productID = dictionary[kDisplayProductID] as? Int64,
+           productID > 0,
+           UInt32(clamping: productID) == candidate.productID {
+            score += 6
+        }
+
+        if let year = dictionary[kDisplayYearOfManufacture] as? Int64,
+           year > 0,
+           UInt32(clamping: year) == candidate.manufactureYear {
+            score += 2
+        }
+
+        if let week = dictionary[kDisplayWeekOfManufacture] as? Int64,
+           week > 0,
+           UInt32(clamping: week) == candidate.manufactureWeek {
+            score += 2
         }
 
         return score
@@ -647,6 +852,98 @@ enum Arm64DDCServiceMatcher {
         return createInfoDictionary(displayID)?.takeRetainedValue() as NSDictionary?
     }
 
+    private static func displayLocation(for displayID: CGDirectDisplayID) -> String? {
+        if let location = displayInfoDictionary(for: displayID)?[kIODisplayLocationKey] as? String {
+            return location
+        }
+
+        guard let service = PrivateDDCBridge.framebufferService(for: displayID) else {
+            return nil
+        }
+
+        return servicePathKey(for: service)
+    }
+
+    private static func nearbyDisplayProperties(for service: io_service_t) -> [String: Any]? {
+        guard let pathKey = servicePathKey(for: service) else {
+            return nil
+        }
+
+        let displayServiceNames = [
+            "AppleCLCD2",
+            "IOMobileFramebufferShim"
+        ]
+
+        for serviceName in displayServiceNames {
+            if let properties = nearbyDisplayProperties(
+                serviceName: serviceName,
+                pathKey: pathKey
+            ) {
+                return properties
+            }
+        }
+
+        return nil
+    }
+
+    private static func nearbyDisplayProperties(
+        serviceName: String,
+        pathKey: String
+    ) -> [String: Any]? {
+        var iterator = io_iterator_t()
+        guard IOServiceGetMatchingServices(
+            kIOMainPortDefault,
+            IOServiceNameMatching(serviceName),
+            &iterator
+        ) == KERN_SUCCESS else {
+            return nil
+        }
+
+        defer {
+            IOObjectRelease(iterator)
+        }
+
+        while case let displayService = IOIteratorNext(iterator), displayService != 0 {
+            defer {
+                IOObjectRelease(displayService)
+            }
+
+            guard servicePathKey(for: displayService) == pathKey else {
+                continue
+            }
+
+            var properties: Unmanaged<CFMutableDictionary>?
+            guard IORegistryEntryCreateCFProperties(
+                displayService,
+                &properties,
+                kCFAllocatorDefault,
+                0
+            ) == KERN_SUCCESS else {
+                continue
+            }
+
+            return properties?.takeRetainedValue() as? [String: Any]
+        }
+
+        return nil
+    }
+
+    private static func servicePathKey(for service: io_service_t) -> String? {
+        guard
+            let unmanagedPath = IORegistryEntryCopyPath(service, kIOServicePlane),
+            let path = unmanagedPath.takeRetainedValue() as String?
+        else {
+            return nil
+        }
+
+        let pattern = #"(?:^|/)disp(?:ext)?\d+(?=[@:/])"#
+        guard let range = path.range(of: pattern, options: .regularExpression) else {
+            return nil
+        }
+
+        return String(path[range]).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
     private static func searchedProperty(key: String, service: io_service_t) -> AnyObject? {
         IORegistryEntrySearchCFProperty(
             service,
@@ -722,6 +1019,12 @@ private enum PrivateDDCBridge {
         UnsafeMutablePointer<io_service_t>
     ) -> Void
 
+    private static let privateFrameworkPaths = [
+        "/System/Library/Frameworks/CoreDisplay.framework/CoreDisplay",
+        "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
+        "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices"
+    ]
+
     private static let createWithService: CreateWithServiceFunction? = loadSymbol("IOAVServiceCreateWithService")
     private static let read: ReadI2CFunction? = loadSymbol("IOAVServiceReadI2C")
     private static let write: WriteI2CFunction? = loadSymbol("IOAVServiceWriteI2C")
@@ -731,7 +1034,19 @@ private enum PrivateDDCBridge {
     )
 
     static func createService(for displayID: CGDirectDisplayID) -> CFTypeRef? {
-        guard let cgsServiceForDisplay, let createWithService else {
+        guard let service = framebufferService(for: displayID), let createWithService else {
+            if createWithService == nil {
+                AppLog.displayBrightnessBackend.info("DDC private symbol IOAVServiceCreateWithService is unavailable")
+            }
+            return nil
+        }
+
+        return createWithService(kCFAllocatorDefault, service)?.takeRetainedValue()
+    }
+
+    static func framebufferService(for displayID: CGDirectDisplayID) -> io_service_t? {
+        guard let cgsServiceForDisplay else {
+            AppLog.displayBrightnessBackend.info("DDC private symbol CGSServiceForDisplayNumber is unavailable")
             return nil
         }
 
@@ -741,7 +1056,7 @@ private enum PrivateDDCBridge {
             return nil
         }
 
-        return createWithService(kCFAllocatorDefault, service)?.takeRetainedValue()
+        return service
     }
 
     static func createService(with service: io_service_t) -> CFTypeRef? {
@@ -779,6 +1094,17 @@ private enum PrivateDDCBridge {
     }
 
     private static func loadSymbol<T>(_ symbol: String) -> T? {
+        for path in privateFrameworkPaths {
+            guard
+                let handle = dlopen(path, RTLD_LAZY),
+                let pointer = dlsym(handle, symbol)
+            else {
+                continue
+            }
+
+            return unsafeBitCast(pointer, to: T.self)
+        }
+
         guard let pointer = dlsym(UnsafeMutableRawPointer(bitPattern: -2), symbol) else {
             return nil
         }

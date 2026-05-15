@@ -8,6 +8,26 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
     typealias DDCBackendFactory = (DisplayInfo, CFTypeRef?) -> (any DisplayBrightnessBackend)?
     typealias SoftwareBackendFactory = (DisplayInfo) -> (any DisplayBrightnessBackend)?
 
+    private enum BackendCandidate: Equatable {
+        case appleNative
+        case ddc
+        case gamma
+        case shade
+
+        init(kind: DisplayBrightnessBackendKind) {
+            switch kind {
+            case .appleNative:
+                self = .appleNative
+            case .ddc:
+                self = .ddc
+            case .gamma:
+                self = .gamma
+            case .shade:
+                self = .shade
+            }
+        }
+    }
+
     private let resolveArm64Services: Arm64ServiceResolver
     private let appleFactory: AppleBackendFactory
     private let ddcFactory: DDCBackendFactory
@@ -15,7 +35,6 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
     private let shadeFactory: SoftwareBackendFactory
 
     init(
-        displayProvider: DisplayProviding,
         resolveArm64Services: @escaping Arm64ServiceResolver = Arm64DDCServiceMatcher.resolveServices,
         appleFactory: AppleBackendFactory? = nil,
         ddcFactory: DDCBackendFactory? = nil,
@@ -23,16 +42,13 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
         shadeFactory: SoftwareBackendFactory? = nil
     ) {
         let displayServicesBridge = DisplayServicesBrightnessBridge()
-        _ = displayProvider
 
         self.resolveArm64Services = resolveArm64Services
         self.appleFactory = appleFactory ?? { display in
-            guard let backend = AppleNativeBrightnessBackend(
+            let backend = AppleNativeBrightnessBackend(
                 display: display,
                 bridge: displayServicesBridge
-            ) else {
-                return nil
-            }
+            )
 
             do {
                 _ = try backend.readBrightness()
@@ -42,7 +58,12 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
             }
         }
         self.ddcFactory = ddcFactory ?? { display, matchedService in
-            if let transport = Arm64DDCTransport(display: display, service: matchedService) {
+            if let transport = Arm64DDCTransport(display: display, service: nil) {
+                return DDCBrightnessBackend(display: display, transport: transport)
+            }
+
+            if let matchedService,
+               let transport = Arm64DDCTransport(display: display, service: matchedService) {
                 return DDCBrightnessBackend(display: display, transport: transport)
             }
 
@@ -68,31 +89,153 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
         var result: [CGDirectDisplayID: any DisplayBrightnessBackend] = [:]
 
         for display in displays {
-            if let backend = reuse(previous[display.id], kind: .appleNative, display: display)
-                ?? appleFactory(display) {
-                result[display.id] = backend
-                continue
-            }
+            for candidate in backendCandidates(for: display) {
+                guard let backend = makeBackend(
+                    candidate,
+                    for: display,
+                    in: displays,
+                    previous: previous,
+                    cache: &arm64Services
+                ) else {
+                    continue
+                }
 
-            if let backend = reuse(previous[display.id], kind: .ddc, display: display)
-                ?? ddcFactory(display, resolvedArm64Service(for: display, in: displays, cache: &arm64Services)) {
                 result[display.id] = backend
-                continue
-            }
-
-            if let backend = reuse(previous[display.id], kind: .gamma, display: display)
-                ?? gammaFactory(display) {
-                result[display.id] = backend
-                continue
-            }
-
-            if let backend = reuse(previous[display.id], kind: .shade, display: display)
-                ?? shadeFactory(display) {
-                result[display.id] = backend
+                break
             }
         }
 
         return result
+    }
+
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        let candidates = backendCandidates(for: display)
+        guard let failedIndex = candidates.firstIndex(of: BackendCandidate(kind: failedBackend.kind)) else {
+            return nil
+        }
+
+        var arm64Services: [CGDirectDisplayID: CFTypeRef]?
+        for candidate in candidates.dropFirst(failedIndex + 1) {
+            guard let backend = makeBackend(
+                candidate,
+                for: display,
+                in: [display],
+                previous: previous.filter { $0.key != display.id },
+                cache: &arm64Services
+            ) else {
+                continue
+            }
+
+            return backend
+        }
+
+        return nil
+    }
+
+    private func backendCandidates(for display: DisplayInfo) -> [BackendCandidate] {
+        if display.isBuiltin {
+            return [.appleNative, .gamma, .shade]
+        }
+
+        if display.supportsAppleNativeBrightness {
+            return [.appleNative, .ddc, .gamma, .shade]
+        }
+
+        return [.ddc, .gamma, .shade]
+    }
+
+    private func makeBackend(
+        _ candidate: BackendCandidate,
+        for display: DisplayInfo,
+        in displays: [DisplayInfo],
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend],
+        cache arm64Services: inout [CGDirectDisplayID: CFTypeRef]?
+    ) -> (any DisplayBrightnessBackend)? {
+        switch candidate {
+        case .appleNative:
+            return appleBackend(for: display, previous: previous)
+        case .ddc:
+            return ddcBackend(
+                for: display,
+                in: displays,
+                previous: previous,
+                cache: &arm64Services
+            )
+        case .gamma:
+            return softwareBackend(
+                kind: .gamma,
+                label: "Gamma",
+                for: display,
+                previous: previous,
+                factory: gammaFactory
+            )
+        case .shade:
+            return softwareBackend(
+                kind: .shade,
+                label: "Shade",
+                for: display,
+                previous: previous,
+                factory: shadeFactory
+            )
+        }
+    }
+
+    private func appleBackend(
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        guard display.isAppleDisplay else {
+            return nil
+        }
+
+        guard let backend = reuse(previous[display.id], kind: .appleNative, display: display)
+            ?? appleFactory(display) else {
+            return nil
+        }
+
+        AppLog.displayBrightnessBackend.debug(
+            "selected Apple native brightness backend for \(display.name, privacy: .public)"
+        )
+        return backend
+    }
+
+    private func softwareBackend(
+        kind: DisplayBrightnessBackendKind,
+        label: String,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend],
+        factory: SoftwareBackendFactory
+    ) -> (any DisplayBrightnessBackend)? {
+        guard let backend = reuse(previous[display.id], kind: kind, display: display)
+            ?? factory(display) else {
+            return nil
+        }
+
+        AppLog.displayBrightnessBackend.info(
+            "using \(label, privacy: .public) software brightness fallback for \(display.name, privacy: .public)"
+        )
+        return backend
+    }
+
+    private func ddcBackend(
+        for display: DisplayInfo,
+        in displays: [DisplayInfo],
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend],
+        cache arm64Services: inout [CGDirectDisplayID: CFTypeRef]?
+    ) -> (any DisplayBrightnessBackend)? {
+        guard let backend = reuse(previous[display.id], kind: .ddc, display: display)
+            ?? ddcFactory(display, resolvedArm64Service(for: display, in: displays, cache: &arm64Services)) else {
+            return nil
+        }
+
+        AppLog.displayBrightnessBackend.debug(
+            "selected DDC brightness backend for \(display.name, privacy: .public)"
+        )
+        return backend
     }
 
     private func resolvedArm64Service(
@@ -127,14 +270,10 @@ final class AppleNativeBrightnessBackend: DisplayBrightnessBackend, @unchecked S
 
     private let bridge: DisplayServicesBrightnessBridge
 
-    init?(
+    init(
         display: DisplayInfo,
         bridge: DisplayServicesBrightnessBridge
     ) {
-        guard display.isAppleDisplay else {
-            return nil
-        }
-
         self.display = display
         self.bridge = bridge
     }
@@ -162,19 +301,14 @@ final class DDCBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable 
             return nil
         }
 
-        do {
-            let brightness = try transport.readBrightness()
-            self.display = display
-            self.transport = transport
-            self.maximumValue = brightness.maximum
-        } catch {
-            return nil
-        }
+        self.display = display
+        self.transport = transport
+        self.maximumValue = (try? transport.readBrightness().maximum).flatMap(Self.validMaximum) ?? 100
     }
 
     func readBrightness() throws -> Double {
         let brightness = try transport.readBrightness()
-        maximumValue = brightness.maximum
+        maximumValue = Self.validMaximum(brightness.maximum) ?? maximumValue
         return maximumValue == 0 ? 1 : Double(brightness.current) / Double(maximumValue)
     }
 
@@ -185,6 +319,10 @@ final class DDCBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable 
     }
 
     func cleanup() {}
+
+    private static func validMaximum(_ maximum: UInt16) -> UInt16? {
+        maximum == 0 ? nil : maximum
+    }
 }
 
 final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable {

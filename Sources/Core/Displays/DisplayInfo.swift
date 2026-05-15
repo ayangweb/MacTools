@@ -12,11 +12,18 @@ struct DisplayInfo: Identifiable, Equatable {
     let serialNumber: UInt32?
 
     var isAppleDisplay: Bool {
-        isBuiltin
-            || vendorNumber == 610
+        isBuiltin || supportsAppleNativeBrightness
+    }
+
+    var supportsAppleNativeBrightness: Bool {
+        vendorNumber == 0x610
             || name.localizedCaseInsensitiveContains("apple")
             || name.localizedCaseInsensitiveContains("studio display")
             || name.localizedCaseInsensitiveContains("pro display")
+            || name.localizedCaseInsensitiveContains("lg ultrafine")
+            || name.localizedCaseInsensitiveContains("thunderbolt display")
+            || name.localizedCaseInsensitiveContains("led cinema")
+            || name.localizedCaseInsensitiveContains("cinema display")
     }
 }
 

@@ -36,10 +36,14 @@ final class PluginHost: ObservableObject {
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
     private let globalShortcutManager: GlobalShortcutManager
+    private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
+    private let displayTopologyRefreshDelay: Duration
 
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
+    private var isHandlingPluginAction = false
+    private var displayTopologyRefreshTask: Task<Void, Never>?
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
@@ -70,7 +74,8 @@ final class PluginHost: ObservableObject {
             ],
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
-            globalShortcutManager: GlobalShortcutManager()
+            globalShortcutManager: GlobalShortcutManager(),
+            displayConfigurationObserver: SystemDisplayConfigurationObserver()
         )
     }
 
@@ -79,7 +84,9 @@ final class PluginHost: ObservableObject {
         componentPlugins: [any ComponentPlugin] = [],
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
-        globalShortcutManager: GlobalShortcutManager
+        globalShortcutManager: GlobalShortcutManager,
+        displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
+        displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) {
         self.plugins = plugins.sorted {
             if $0.manifest.order == $1.manifest.order {
@@ -98,12 +105,14 @@ final class PluginHost: ObservableObject {
         self.shortcutStore = shortcutStore
         self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
         self.globalShortcutManager = globalShortcutManager
+        self.displayConfigurationObserver = displayConfigurationObserver
+        self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
 
         for plugin in corePluginsForCallbacks() {
             let pluginID = plugin.metadata.id
 
             plugin.onStateChange = { [weak self] in
-                self?.rebuildDerivedState()
+                self?.rebuildDerivedStateAfterPluginChange()
             }
             plugin.requestPermissionGuidance = { [weak self] permissionID in
                 self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
@@ -117,17 +126,30 @@ final class PluginHost: ObservableObject {
             self?.handleShortcutTrigger(shortcutID: shortcutID)
         }
 
-        rebuildDerivedState()
+        self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
+            self?.scheduleDisplayTopologyRefresh()
+        }
+
         refreshAll()
     }
 
+    deinit {
+        displayTopologyRefreshTask?.cancel()
+    }
+
     func refreshAll() {
-        for plugin in corePluginsForCallbacks() {
-            plugin.refresh()
+        handlePluginAction {
+            for plugin in corePluginsForCallbacks() {
+                plugin.refresh()
+            }
         }
 
-        rebuildDerivedState()
         syncGlobalShortcuts()
+    }
+
+    func refreshDisplayTopology() {
+        displayTopologyRefreshTask?.cancel()
+        refreshDisplayTopologyNow()
     }
 
     func isSwitchOn(for pluginID: String) -> Bool {
@@ -139,8 +161,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.setSwitch(isOn))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.setSwitch(isOn))
+        }
     }
 
     func setDisclosureExpanded(_ isExpanded: Bool, for pluginID: String) {
@@ -148,8 +171,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.setDisclosureExpanded(isExpanded))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.setDisclosureExpanded(isExpanded))
+        }
     }
 
     func setPanelSelectionValue(
@@ -161,8 +185,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.setSelection(controlID: controlID, optionID: optionID))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.setSelection(controlID: controlID, optionID: optionID))
+        }
     }
 
     func setPanelNavigationSelectionValue(
@@ -174,10 +199,11 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(
-            .setNavigationSelection(controlID: controlID, optionID: optionID)
-        )
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(
+                .setNavigationSelection(controlID: controlID, optionID: optionID)
+            )
+        }
     }
 
     func clearPanelNavigationSelection(
@@ -188,8 +214,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.clearNavigationSelection(controlID: controlID))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.clearNavigationSelection(controlID: controlID))
+        }
     }
 
     func setPanelDateValue(
@@ -201,8 +228,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.setDate(controlID: controlID, value: date))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.setDate(controlID: controlID, value: date))
+        }
     }
 
     func setPanelSliderValue(
@@ -215,8 +243,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.setSlider(controlID: controlID, value: value, phase: phase))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.setSlider(controlID: controlID, value: value, phase: phase))
+        }
     }
 
     func invokePanelAction(controlID: String, for pluginID: String) {
@@ -224,8 +253,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePanelAction(.invokeAction(controlID: controlID))
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePanelAction(.invokeAction(controlID: controlID))
+        }
     }
 
     func performSettingsAction(pluginID: String, actionID: String) {
@@ -233,8 +263,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handleSettingsAction(id: actionID)
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handleSettingsAction(id: actionID)
+        }
     }
 
     func performPermissionAction(pluginID: String, permissionID: String) {
@@ -242,8 +273,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        plugin.handlePermissionAction(id: permissionID)
-        rebuildDerivedState()
+        handlePluginAction {
+            plugin.handlePermissionAction(id: permissionID)
+        }
     }
 
     func setShortcutBinding(_ binding: ShortcutBinding, for shortcutID: String) {
@@ -370,6 +402,14 @@ final class PluginHost: ObservableObject {
     }
 
     func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginComponentViewItem {
+        componentViewItem(for: itemID, dismiss: dismiss, isPanelVisible: true)
+    }
+
+    func componentViewItem(
+        for itemID: String,
+        dismiss: @escaping () -> Void,
+        isPanelVisible: Bool
+    ) -> PluginComponentViewItem {
         if let cachedItem = componentViewCache[itemID] {
             return cachedItem
         }
@@ -383,7 +423,11 @@ final class PluginHost: ObservableObject {
         let item = PluginComponentViewItem(
             id: itemID,
             content: plugin.makeComponentView(
-                context: PluginComponentContext(pluginID: itemID, dismiss: dismiss)
+                context: PluginComponentContext(
+                    pluginID: itemID,
+                    dismiss: dismiss,
+                    isPanelVisible: isPanelVisible
+                )
             )
         )
         componentViewCache[itemID] = item
@@ -423,10 +467,8 @@ final class PluginHost: ObservableObject {
         return item
     }
 
-    func warmComponentViews(dismiss: @escaping () -> Void) {
-        for item in componentItems {
-            _ = componentViewItem(for: item.id, dismiss: dismiss)
-        }
+    func discardComponentViews() {
+        componentViewCache.removeAll()
     }
 
     private func plugin(for pluginID: String) -> (any FeaturePlugin)? {
@@ -445,10 +487,22 @@ final class PluginHost: ObservableObject {
         let orderedPlugins = orderedPlugins()
         let orderedComponentPlugins = orderedComponentPlugins()
         let orderedDescriptors = orderedPluginDescriptors()
+        let panelStatesByID = Dictionary(
+            uniqueKeysWithValues: orderedPlugins.map { plugin in
+                (plugin.manifest.id, plugin.panelState)
+            }
+        )
+        let componentStatesByID = Dictionary(
+            uniqueKeysWithValues: orderedComponentPlugins.map { plugin in
+                (plugin.metadata.id, plugin.componentState)
+            }
+        )
 
         panelItems = orderedPlugins.compactMap { plugin in
             let manifest = plugin.manifest
-            let state = plugin.panelState
+            guard let state = panelStatesByID[manifest.id] else {
+                return nil
+            }
 
             guard
                 state.isVisible,
@@ -481,7 +535,9 @@ final class PluginHost: ObservableObject {
 
         componentItems = orderedComponentPlugins.compactMap { plugin in
             let metadata = plugin.metadata
-            let state = plugin.componentState
+            guard let state = componentStatesByID[metadata.id] else {
+                return nil
+            }
 
             guard
                 state.isVisible,
@@ -523,8 +579,8 @@ final class PluginHost: ObservableObject {
                     metadata.id,
                     defaultPluginIDs: defaultPluginIDs
                 ),
-                isActive: descriptor.featurePlugin?.panelState.isOn == true
-                    || descriptor.componentPlugin?.componentState.isActive == true,
+                isActive: descriptor.featurePlugin.flatMap { panelStatesByID[$0.manifest.id] }?.isOn == true
+                    || descriptor.componentPlugin.flatMap { componentStatesByID[$0.metadata.id] }?.isActive == true,
                 presentation: descriptor.presentation
             )
         }
@@ -594,8 +650,59 @@ final class PluginHost: ObservableObject {
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
         syncSelectedPluginConfigurationID()
 
-        hasActivePlugin = plugins.contains(where: { $0.panelState.isOn })
-            || componentPlugins.contains(where: { $0.componentState.isActive })
+        hasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
+            || componentStatesByID.values.contains(where: \.isActive)
+    }
+
+    private func handlePluginAction(_ action: () -> Void) {
+        guard !isHandlingPluginAction else {
+            action()
+            return
+        }
+
+        isHandlingPluginAction = true
+
+        action()
+
+        isHandlingPluginAction = false
+        rebuildDerivedState()
+    }
+
+    private func rebuildDerivedStateAfterPluginChange() {
+        guard !isHandlingPluginAction else {
+            return
+        }
+
+        rebuildDerivedState()
+    }
+
+    private func scheduleDisplayTopologyRefresh() {
+        displayTopologyRefreshTask?.cancel()
+        let refreshDelay = displayTopologyRefreshDelay
+        displayTopologyRefreshTask = Task { @MainActor [weak self, refreshDelay] in
+            do {
+                try await Task.sleep(for: refreshDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.refreshDisplayTopologyNow()
+        }
+    }
+
+    private func refreshDisplayTopologyNow() {
+        displayTopologyRefreshTask = nil
+        handlePluginAction {
+            for plugin in corePluginsForCallbacks() {
+                if let displayTopologyRefreshing = plugin as? DisplayTopologyRefreshing {
+                    displayTopologyRefreshing.refreshDisplayTopology()
+                }
+            }
+        }
     }
 
     private func buildPluginConfigurationItems(
@@ -853,8 +960,9 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
-        rebuildDerivedState()
+        handlePluginAction {
+            descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+        }
     }
 
     private func requestPermissionGuidance(forPluginID pluginID: String, permissionID: String) {

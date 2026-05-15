@@ -15,8 +15,8 @@ enum ComponentPanelLayout {
     static let horizontalSpacing: CGFloat = 8
     static let verticalSpacing: CGFloat = 8
     static let spacing = horizontalSpacing
-    static let horizontalPadding: CGFloat = 10
-    static let verticalPadding: CGFloat = 10
+    static let horizontalPadding = MenuBarPanelLayout.outerPadding
+    static let verticalPadding = MenuBarPanelLayout.outerPadding
     static let emptyContentHeight: CGFloat = 164
     static let maximumPanelHeight: CGFloat = 720
     static let minimumPanelHeight: CGFloat = 220
@@ -170,6 +170,7 @@ enum ComponentGridPlacementEngine {
 struct ComponentPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
     let panelHeight: CGFloat
+    let isPanelVisible: Bool
     let onDismiss: () -> Void
 
     private var placements: [ComponentGridPlacement] {
@@ -178,7 +179,9 @@ struct ComponentPanelContent: View {
 
     var body: some View {
         Group {
-            if pluginHost.componentItems.isEmpty {
+            if !isPanelVisible {
+                Color.clear
+            } else if pluginHost.componentItems.isEmpty {
                 emptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -187,6 +190,7 @@ struct ComponentPanelContent: View {
                         pluginHost: pluginHost,
                         items: pluginHost.componentItems,
                         placements: placements,
+                        isPanelVisible: isPanelVisible,
                         onDismiss: onDismiss
                     )
                 }
@@ -224,6 +228,7 @@ private struct ComponentGridView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [PluginComponentItem]
     let placements: [ComponentGridPlacement]
+    let isPanelVisible: Bool
     let onDismiss: () -> Void
 
     var body: some View {
@@ -233,6 +238,7 @@ private struct ComponentGridView: View {
                     ComponentCardContainer(
                         pluginHost: pluginHost,
                         item: item,
+                        isPanelVisible: isPanelVisible,
                         onDismiss: onDismiss
                     )
                     .frame(
@@ -257,10 +263,15 @@ private struct ComponentGridView: View {
 private struct ComponentCardContainer: View {
     @ObservedObject var pluginHost: PluginHost
     let item: PluginComponentItem
+    let isPanelVisible: Bool
     let onDismiss: () -> Void
 
     var body: some View {
-        pluginHost.componentViewItem(for: item.id, dismiss: onDismiss).content
+        pluginHost.componentViewItem(
+            for: item.id,
+            dismiss: onDismiss,
+            isPanelVisible: isPanelVisible
+        ).content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .disabled(!item.isEnabled)

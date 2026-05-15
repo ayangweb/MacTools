@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppWindowRouter {
+final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let pluginHost: PluginHost
     private let appUpdater: AppUpdater
     private let menuBarIconSettings: MenuBarIconSettings
@@ -16,6 +16,7 @@ final class AppWindowRouter {
         self.pluginHost = pluginHost
         self.appUpdater = appUpdater
         self.menuBarIconSettings = menuBarIconSettings
+        super.init()
     }
 
     func showSettings() {
@@ -45,8 +46,19 @@ final class AppWindowRouter {
                 menuBarIconSettings: menuBarIconSettings
             )
         )
+        window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
         return window
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsWindow else {
+            return
+        }
+
+        window.delegate = nil
+        window.contentView = nil
+        settingsWindow = nil
     }
 }

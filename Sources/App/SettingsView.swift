@@ -111,9 +111,6 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            pluginHost.refreshAll()
-        }
     }
 
     private var featureManagementListHeight: CGFloat {
@@ -195,9 +192,6 @@ private struct PluginConfigurationSettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.windowBackground)
-        .onAppear {
-            pluginHost.refreshAll()
-        }
     }
 
     private var selectedItem: PluginConfigurationItem? {

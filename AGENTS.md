@@ -38,8 +38,10 @@
 - 新增菜单栏功能优先实现 `FeaturePlugin`，新增右键组件面板能力优先实现 `ComponentPlugin`。
 - `PluginHost` 负责插件注册、排序、可见性、快捷键、权限卡片和派生展示状态；不要让具体插件直接操纵宿主 UI。
 - 插件 UI 应通过 `PluginPanelState`、`PluginPanelDetail`、`PluginPanelControl` 等描述式模型表达；除 `ComponentPlugin.makeComponentView` 外，避免绕过现有面板框架自建菜单栏 UI。
-- 插件状态与 UI 相关代码默认在 `@MainActor`；耗时扫描、文件系统或系统调用应避免长时间阻塞主线程。
-- 插件状态变化后调用 `onStateChange?()`，使宿主重建派生状态。
+- 插件状态与 UI 相关代码默认在 `@MainActor`；耗时扫描、文件系统或系统调用应避免长时间阻塞主线程。`panelState`、`componentState` 应尽量只读取已有快照，不要在 getter 中同步扫描硬件、文件系统或网络。
+- `PluginHost` 只负责派生面板项、组件项、设置项等通用展示状态，并会缓存组件视图和合并短时间内的状态重建；业务数据快照、缓存失效和刷新时机仍应由具体插件或组件负责。
+- 插件状态变化后调用 `onStateChange?()`，使宿主重建派生状态。若状态会被外部系统事件改变（如显示器热插拔、权限变化、文件系统变化、日历授权变化），需要接入明确的事件监听或刷新入口，并配合 debounce/节流更新快照，避免依赖用户展开面板、切换设置页或全量 `refreshAll()` 才拿到新数据。
+- 有跨插件通用意义的外部状态变化应优先抽象成 Core 层协议或观察器；例如显示器拓扑变化使用 `DisplayConfigurationObserving` 通知宿主，再由实现 `DisplayTopologyRefreshing` 的显示器相关插件刷新自身快照。
 - 控件 ID、插件 ID、快捷键 ID 要稳定、可读，并尽量集中在功能内的私有常量中。
 - 新增插件需在 `PluginHost` 的默认 `plugins` 或 `componentPlugins` 列表中注册，并设置合适的 `order`。
 
