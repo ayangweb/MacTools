@@ -4,6 +4,7 @@ import OSLog
 enum AppLog {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "com.example.mactools"
 
+    static let appearancePlugin = Logger(subsystem: subsystem, category: "AppearancePlugin")
     static let keepAwakePlugin = Logger(subsystem: subsystem, category: "KeepAwakePlugin")
     static let keepAwakeSession = Logger(subsystem: subsystem, category: "KeepAwakeSession")
     static let physicalCleanModePlugin = Logger(subsystem: subsystem, category: "PhysicalCleanModePlugin")

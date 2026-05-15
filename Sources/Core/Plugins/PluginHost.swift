@@ -60,6 +60,7 @@ final class PluginHost: ObservableObject {
     convenience init() {
         self.init(
             plugins: [
+                AppearancePlugin(),
                 DisplayBrightnessPlugin(),
                 DisplayResolutionPlugin(),
                 HideNotchPlugin(),
