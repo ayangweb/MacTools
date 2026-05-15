@@ -82,7 +82,7 @@ final class AboutUpdateViewModel: ObservableObject {
         case .checking:
             return "正在获取最新 Release 信息，请稍候。"
         case .upToDate:
-            return "当前版本 \(AppMetadata.versionDescription)"
+            return "当前已是最新版本。"
         case .updateAvailable:
             return "已发现更高版本，点击“立即更新”后会进入系统标准安装流程。"
         case let .blocked(reason):
