@@ -37,6 +37,7 @@ final class PluginHost: ObservableObject {
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
+    private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
     private let displayTopologyRefreshDelay: Duration
 
     private var shortcutErrors: [String: String] = [:]
@@ -65,6 +66,7 @@ final class PluginHost: ObservableObject {
                 DisplayResolutionPlugin(),
                 HideNotchPlugin(),
                 KeepAwakePlugin(),
+                MiddleClickPlugin(),
                 DiskCleanFeature.shared.makePlugin(),
                 LaunchControlFeature.shared.makePlugin(),
                 PhysicalCleanModePlugin()
@@ -76,7 +78,8 @@ final class PluginHost: ObservableObject {
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
             globalShortcutManager: GlobalShortcutManager(),
-            displayConfigurationObserver: SystemDisplayConfigurationObserver()
+            displayConfigurationObserver: SystemDisplayConfigurationObserver(),
+            accessibilityPermissionObserver: AccessibilityPermissionObserver()
         )
     }
 
@@ -87,6 +90,7 @@ final class PluginHost: ObservableObject {
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
+        accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) {
         self.plugins = plugins.sorted {
@@ -107,6 +111,7 @@ final class PluginHost: ObservableObject {
         self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
         self.globalShortcutManager = globalShortcutManager
         self.displayConfigurationObserver = displayConfigurationObserver
+        self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
 
         for plugin in corePluginsForCallbacks() {
@@ -129,6 +134,10 @@ final class PluginHost: ObservableObject {
 
         self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
             self?.scheduleDisplayTopologyRefresh()
+        }
+
+        self.accessibilityPermissionObserver?.onPermissionChange = { [weak self] in
+            self?.refreshAccessibilityPermissionNow()
         }
 
         refreshAll()
@@ -701,6 +710,16 @@ final class PluginHost: ObservableObject {
             for plugin in corePluginsForCallbacks() {
                 if let displayTopologyRefreshing = plugin as? DisplayTopologyRefreshing {
                     displayTopologyRefreshing.refreshDisplayTopology()
+                }
+            }
+        }
+    }
+
+    private func refreshAccessibilityPermissionNow() {
+        handlePluginAction {
+            for plugin in corePluginsForCallbacks() {
+                if let accessibilityRefreshing = plugin as? AccessibilityPermissionRefreshing {
+                    accessibilityRefreshing.refreshAccessibilityPermission()
                 }
             }
         }
