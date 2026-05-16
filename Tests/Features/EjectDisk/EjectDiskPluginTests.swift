@@ -7,7 +7,7 @@ final class EjectDiskPluginTests: XCTestCase {
         let plugin = EjectDiskPlugin()
 
         XCTAssertEqual(plugin.manifest.id, "eject-disk")
-        XCTAssertEqual(plugin.manifest.title, "推出所有磁盘")
+        XCTAssertEqual(plugin.manifest.title, "推出磁盘")
     }
 
     func testControlStyleIsSwitch() {
@@ -42,10 +42,10 @@ final class EjectDiskPluginTests: XCTestCase {
         XCTAssertEqual(plugin.manifest.defaultDescription, "推出所有可移动磁盘")
     }
 
-    func testSubtitleDescribesNoEjectableDiskByDefault() {
+    func testSubtitleMatchesDefaultDescriptionByDefault() {
         let plugin = EjectDiskPlugin()
 
-        XCTAssertEqual(plugin.panelState.subtitle, "未检测到可推出磁盘")
+        XCTAssertEqual(plugin.panelState.subtitle, plugin.manifest.defaultDescription)
     }
 }
 
