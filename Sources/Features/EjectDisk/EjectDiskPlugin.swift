@@ -21,15 +21,14 @@ final class EjectDiskPlugin: FeaturePlugin {
 
     private let logger = AppLog.ejectDiskPlugin
     private var isEjecting = false
-    private var isEjectedOn = false
     private var hasEjectableDisk = false
     private var lastErrorMessage: String?
-    private var diskMonitorTimer: Timer?
+    private var volumeMountObservers: [NSObjectProtocol] = []
 
     var panelState: PluginPanelState {
         PluginPanelState(
             subtitle: subtitle,
-            isOn: isEjectedOn,
+            isOn: isEjecting,
             isExpanded: false,
             isEnabled: !isEjecting && hasEjectableDisk,
             isVisible: true,
@@ -43,8 +42,52 @@ final class EjectDiskPlugin: FeaturePlugin {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
-        if diskMonitorTimer == nil {
-            startDiskMonitoring()
+        let hasEjectable = Self.hasEjectableDiskSync()
+        if self.hasEjectableDisk != hasEjectable {
+            self.hasEjectableDisk = hasEjectable
+            self.onStateChange?()
+        }
+        
+        // 设置磁盘挂载/卸载事件监听
+        setupVolumeMountObserver()
+    }
+    
+    private func setupVolumeMountObserver() {
+        // 如果已经设置了监听，就不再重复设置
+        guard volumeMountObservers.isEmpty else { return }
+        
+        let workspace = NSWorkspace.shared
+        let notificationCenter = NSWorkspace.shared.notificationCenter
+        
+        let mountObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.didMountNotification,
+            object: workspace,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkForEjectableDiskAndUpdate()
+            }
+        }
+        
+        let unmountObserver = notificationCenter.addObserver(
+            forName: NSWorkspace.didUnmountNotification,
+            object: workspace,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkForEjectableDiskAndUpdate()
+            }
+        }
+        
+        volumeMountObservers.append(mountObserver)
+        volumeMountObservers.append(unmountObserver)
+    }
+    
+    private func checkForEjectableDiskAndUpdate() {
+        let hasEjectable = Self.hasEjectableDiskSync()
+        if self.hasEjectableDisk != hasEjectable {
+            self.hasEjectableDisk = hasEjectable
+            self.onStateChange?()
         }
     }
 
@@ -53,8 +96,6 @@ final class EjectDiskPlugin: FeaturePlugin {
         
         if enabled {
             ejectAllDisks()
-        } else {
-            isEjectedOn = false
         }
     }
 
@@ -75,72 +116,17 @@ final class EjectDiskPlugin: FeaturePlugin {
         return manifest.defaultDescription
     }
 
-    private func cleanup() {
-        diskMonitorTimer?.invalidate()
-        diskMonitorTimer = nil
-    }
-
-    private func startDiskMonitoring() {
-        guard diskMonitorTimer == nil else { return }
-
-        // 立即检查一次
-        checkForEjectableDisk()
-
-        // 每0.5秒检查一次
-        diskMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.checkForEjectableDisk()
-            }
-        }
-    }
-
-    private func stopDiskMonitoring() {
-        diskMonitorTimer?.invalidate()
-        diskMonitorTimer = nil
-    }
-
-    private func checkForEjectableDisk() {
-        Task { [weak self] in
-            let hasEjectable = await Task.detached(priority: .utility) {
-                Self.hasEjectableDiskSync()
-            }.value
-            guard let self else { return }
-
-            if self.hasEjectableDisk != hasEjectable {
-                self.hasEjectableDisk = hasEjectable
-                self.onStateChange?()
-            }
-        }
-    }
-
     nonisolated private static func hasEjectableDiskSync() -> Bool {
         let fileManager = FileManager.default
         let logger = AppLog.ejectDiskPlugin
         
         do {
-            // 检查 /Volumes 下的内容
             let volumesPath = "/Volumes"
             guard fileManager.fileExists(atPath: volumesPath) else {
                 return false
             }
             
-            let contents = try fileManager.contentsOfDirectory(atPath: volumesPath)
-            
-            // 过滤掉系统卷，查找可推出的磁盘
-            let ejectableVolumes = contents.filter { name in
-                // 排除系统卷
-                if name == "Macintosh HD" || name.hasPrefix(".") {
-                    return false
-                }
-                
-                let volumePath = "\(volumesPath)/\(name)"
-                var isDir: ObjCBool = false
-                let exists = fileManager.fileExists(atPath: volumePath, isDirectory: &isDir)
-                
-                // 必须是目录且是符号链接或实际目录
-                return exists && isDir.boolValue
-            }
-            
+            let ejectableVolumes = try getEjectableVolumes(from: volumesPath)
             logger.debug("Found \(ejectableVolumes.count) ejectable volumes")
             return !ejectableVolumes.isEmpty
             
@@ -149,12 +135,30 @@ final class EjectDiskPlugin: FeaturePlugin {
             return false
         }
     }
+    
+    nonisolated private static func getEjectableVolumes(from volumesPath: String) throws -> [String] {
+        let fileManager = FileManager.default
+        let contents = try fileManager.contentsOfDirectory(atPath: volumesPath)
+        
+        return contents.filter { name in
+            // 排除系统卷
+            if name == "Macintosh HD" || name.hasPrefix(".") {
+                return false
+            }
+            
+            let volumePath = "\(volumesPath)/\(name)"
+            var isDir: ObjCBool = false
+            let exists = fileManager.fileExists(atPath: volumePath, isDirectory: &isDir)
+            
+            // 必须是目录
+            return exists && isDir.boolValue
+        }
+    }
 
     private func ejectAllDisks() {
         guard !isEjecting else { return }
 
         isEjecting = true
-        isEjectedOn = true
         lastErrorMessage = nil
         onStateChange?()
 
@@ -164,7 +168,6 @@ final class EjectDiskPlugin: FeaturePlugin {
 
                 await MainActor.run {
                     isEjecting = false
-                    isEjectedOn = false
                     lastErrorMessage = nil
                     onStateChange?()
                 }
@@ -174,7 +177,6 @@ final class EjectDiskPlugin: FeaturePlugin {
 
                 await MainActor.run {
                     isEjecting = false
-                    isEjectedOn = false
                     lastErrorMessage = errorMessage
                     onStateChange?()
                 }
@@ -190,16 +192,7 @@ final class EjectDiskPlugin: FeaturePlugin {
             throw NSError(domain: "EjectDiskPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: "/Volumes 目录不可用"])
         }
         
-        let contents = try fileManager.contentsOfDirectory(atPath: volumesPath)
-        
-        let ejectableVolumes = contents.filter { name in
-            if name == "Macintosh HD" || name.hasPrefix(".") {
-                return false
-            }
-            let volumePath = "\(volumesPath)/\(name)"
-            var isDir: ObjCBool = false
-            return fileManager.fileExists(atPath: volumePath, isDirectory: &isDir) && isDir.boolValue
-        }
+        let ejectableVolumes = try Self.getEjectableVolumes(from: volumesPath)
         
         guard !ejectableVolumes.isEmpty else {
             throw NSError(domain: "EjectDiskPlugin", code: 2, userInfo: [NSLocalizedDescriptionKey: "未找到可推出的磁盘"])
@@ -221,11 +214,7 @@ final class EjectDiskPlugin: FeaturePlugin {
             }
         }
         
-        // 如果有错误但也有成功的，这不算完全失败
-        if successCount > 0 && errorMessages.isEmpty {
-            return
-        }
-        
+        // 如果有错误，抛出异常
         if !errorMessages.isEmpty {
             let message = "已推出 \(successCount) 个磁盘，\(errorMessages.count) 个失败:\n\(errorMessages.joined(separator: "\n"))"
             throw NSError(domain: "EjectDiskPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
