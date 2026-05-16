@@ -5,13 +5,24 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 0.14.0</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v0.14.0</link>
-            <sparkle:version>26</sparkle:version>
-            <sparkle:shortVersionString>0.14.0</sparkle:shortVersionString>
-            <sparkle:releaseNotesLink>https://github.com/ggbond268/MacTools/releases/tag/v0.14.0</sparkle:releaseNotesLink>
-            <pubDate>Sat, 16 May 2026 09:20:51 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v0.14.0/MacTools.dmg" length="7328904" type="application/octet-stream" sparkle:edSignature="PGc3IkNNePmTq2MukAwzCZv+2wSzIvnLI2pefOwOsKx2fIZmobZNFohYp7nIAMBkn84ELTyEVRfQu54tM4ZYBA==" />
+            <title>Version 0.15.0</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v0.15.0</link>
+            <sparkle:version>27</sparkle:version>
+            <sparkle:shortVersionString>0.15.0</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v0.15.0 -->
+
+## What's Changed
+### Other Changes
+* fix: fix disappearing “Check for Updates” button issue by @ayangweb in https://github.com/ggbond268/MacTools/pull/41
+* feat: add true tone display plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/42
+* feat: add night shift plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/43
+
+
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v0.14.0...v0.15.0
+]]></description>
+            <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
+            <pubDate>Sat, 16 May 2026 11:32:58 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v0.15.0/MacTools.dmg" length="7506746" type="application/octet-stream" sparkle:edSignature="gIqcKSc8o75OPpDA7aH16frEPRzuAIpM6MwXen7B/tWjJU4F4E8bsYRsDYPv18WDjW0A16aPj/UYtmyB7fTuAA==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
