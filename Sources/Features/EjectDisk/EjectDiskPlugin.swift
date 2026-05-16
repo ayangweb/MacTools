@@ -9,10 +9,11 @@ final class EjectDiskPlugin: FeaturePlugin {
         title: "推出磁盘",
         iconName: "eject.fill",
         iconTint: Color(nsColor: .systemGray),
-        controlStyle: .switch,
+        controlStyle: .button,
         menuActionBehavior: .keepPresented,
         order: 92,
-        defaultDescription: "推出所有可移动磁盘"
+        defaultDescription: "推出所有可移动磁盘",
+        buttonTitle: "推出"
     )
 
     var onStateChange: (() -> Void)?
@@ -28,7 +29,7 @@ final class EjectDiskPlugin: FeaturePlugin {
     var panelState: PluginPanelState {
         PluginPanelState(
             subtitle: subtitle,
-            isOn: isEjecting,
+            isOn: false,
             isExpanded: false,
             isEnabled: !isEjecting && hasEjectableDisk,
             isVisible: true,
@@ -92,10 +93,13 @@ final class EjectDiskPlugin: FeaturePlugin {
     }
 
     func handlePanelAction(_ action: PluginPanelAction) {
-        guard case let .setSwitch(enabled) = action else { return }
-        
-        if enabled {
-            ejectAllDisks()
+        switch action {
+        case let .invokeAction(controlID):
+            if controlID == "execute" {
+                ejectAllDisks()
+            }
+        default:
+            break
         }
     }
 
