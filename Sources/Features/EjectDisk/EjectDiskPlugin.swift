@@ -88,7 +88,9 @@ final class EjectDiskPlugin: FeaturePlugin {
 
         // 每0.5秒检查一次
         diskMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.checkForEjectableDisk()
+            Task { @MainActor [weak self] in
+                self?.checkForEjectableDisk()
+            }
         }
     }
 
@@ -98,20 +100,22 @@ final class EjectDiskPlugin: FeaturePlugin {
     }
 
     private func checkForEjectableDisk() {
-        Task.detached(priority: .utility) { [weak self] in
-            let hasEjectable = await self?.hasEjectableDiskAsync() ?? false
+        Task { [weak self] in
+            let hasEjectable = await Task.detached(priority: .utility) {
+                Self.hasEjectableDiskSync()
+            }.value
+            guard let self else { return }
 
-            await MainActor.run {
-                if self?.hasEjectableDisk != hasEjectable {
-                    self?.hasEjectableDisk = hasEjectable
-                    self?.onStateChange?()
-                }
+            if self.hasEjectableDisk != hasEjectable {
+                self.hasEjectableDisk = hasEjectable
+                self.onStateChange?()
             }
         }
     }
 
-    private func hasEjectableDiskAsync() async -> Bool {
+    nonisolated private static func hasEjectableDiskSync() -> Bool {
         let fileManager = FileManager.default
+        let logger = AppLog.ejectDiskPlugin
         
         do {
             // 检查 /Volumes 下的内容
@@ -137,7 +141,7 @@ final class EjectDiskPlugin: FeaturePlugin {
                 return exists && isDir.boolValue
             }
             
-            logger.debug("Found \(ejectableVolumes.count) ejectable volumes: \(ejectableVolumes)")
+            logger.debug("Found \(ejectableVolumes.count) ejectable volumes")
             return !ejectableVolumes.isEmpty
             
         } catch {
