@@ -83,6 +83,50 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 
 也可以在 GitHub Actions 页面手动运行 `Release`，输入已存在的 tag，例如 `v0.9.3`；该 tag 指向的提交里仍必须已经更新 `project.yml`。
 
+## Release Notes 规范
+
+Release 工作流会在创建或更新 GitHub Release 前自动生成更新日志。生成逻辑使用 GitHub 的 release notes API，并读取 `.github/release.yml` 中的分类配置。
+
+每个会进入 release notes 的 PR 应至少带一个发布分类 label：
+
+| Label | Release 分组 | 用途 |
+| --- | --- | --- |
+| `release:feature` | `New Features` | 新功能、用户可感知的新能力。 |
+| `release:changed` | `Changed` | 行为、交互、文案或默认值变化。 |
+| `release:fix` | `Fixed` | Bug 修复、稳定性修复。 |
+| `release:maintenance` | `Maintenance` | 构建、CI、依赖、内部维护。 |
+| `release:ignore` | 不进入更新日志 | 版本 bump、appcast 自动提交、纯发布流水线噪音。 |
+
+首次启用时可以用 GitHub CLI 创建这些 label：
+
+```bash
+gh label create release:feature --color 0E8A16 --description "User-facing feature for release notes"
+gh label create release:changed --color FBCA04 --description "Changed behavior for release notes"
+gh label create release:fix --color D73A4A --description "Bug fix for release notes"
+gh label create release:maintenance --color 5319E7 --description "Maintenance change for release notes"
+gh label create release:ignore --color C0C0C0 --description "Exclude from release notes"
+```
+
+兼容 GitHub 默认 label：`enhancement` 会归入 `New Features`，`bug` 会归入 `Fixed`，`dependencies` 和 `documentation` 会归入 `Maintenance`。如果一个 PR 没有匹配到以上 label，会落到 `Other Changes`，发布前应尽量清空这个分组。
+
+PR 标题会直接出现在 GitHub Release 中，因此标题应面向用户或维护者可读，例如：
+
+```text
+feat: add clear clipboard action
+fix: keep display resolution side panel clicks working
+changed: refine menu item icon names
+```
+
+发布版本本身的提交或 PR，例如 `Bump version to 0.14.0`，应打 `release:ignore`，避免出现在正式更新日志里。
+
+如果某个版本需要像产品公告一样在自动列表上方放一段手写摘要，可以在推 tag 前添加：
+
+```text
+.github/release-highlights/v0.14.0.md
+```
+
+文件内容会被原样置顶到自动生成的 release notes 前。没有对应文件时，Release 工作流只使用自动生成内容。
+
 稳定版发布成功创建 GitHub Release 后，Release 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时用刚生成的 DMG URL 和 SHA-256 更新 `ggbond268/homebrew-mactools` 中的 `Casks/mactools.rb`，并打开更新 PR。预发布版本会跳过 Homebrew 同步；未配置该 secret 时也会跳过，不影响发布。Homebrew PR 合并后，用户本地仍需要先运行 `brew update` 刷新 tap，才能通过 `brew upgrade --cask --greedy ggbond268/mactools/mactools` 检测到新版本。
 
 仓库设置中需要允许 workflow 写入：`Settings` → `Actions` → `General` → `Workflow permissions` 选择 `Read and write permissions`。

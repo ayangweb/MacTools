@@ -390,17 +390,47 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Generate GitHub Release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GENERATED_NOTES="$RUNNER_TEMP/release-notes.generated.md"
+          RELEASE_NOTES="$RUNNER_TEMP/release-notes.md"
+          HIGHLIGHTS_PATH=".github/release-highlights/${TAG}.md"
+          TARGET_COMMIT="$(git rev-parse HEAD)"
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            -f target_commitish="$TARGET_COMMIT" \
+            -f configuration_file_path=".github/release.yml" \
+            --jq .body > "$GENERATED_NOTES"
+
+          if [[ -f "$HIGHLIGHTS_PATH" ]]; then
+            cat "$HIGHLIGHTS_PATH" > "$RELEASE_NOTES"
+            printf '\n\n' >> "$RELEASE_NOTES"
+            cat "$GENERATED_NOTES" >> "$RELEASE_NOTES"
+          else
+            cat "$GENERATED_NOTES" > "$RELEASE_NOTES"
+          fi
+
+          {
+            echo "RELEASE_NOTES_PATH=$RELEASE_NOTES"
+          } >> "$GITHUB_ENV"
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RELEASE_ARGS=(--title "${PROJECT_NAME} ${VERSION}" --notes "Signed and notarized ${PROJECT_NAME} ${VERSION}.")
+          RELEASE_ARGS=(--title "${PROJECT_NAME} ${VERSION}" --notes-file "$RELEASE_NOTES_PATH")
           if [[ "$PRERELEASE" == "true" ]]; then
             RELEASE_ARGS+=(--prerelease)
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$DMG_PATH#${PROJECT_NAME}.dmg" "$SHA256_PATH#${PROJECT_NAME}.sha256" --clobber
+            gh release edit "$TAG" "${RELEASE_ARGS[@]}"
           else
             gh release create "$TAG" "$DMG_PATH#${PROJECT_NAME}.dmg" "$SHA256_PATH#${PROJECT_NAME}.sha256" "${RELEASE_ARGS[@]}"
           fi
