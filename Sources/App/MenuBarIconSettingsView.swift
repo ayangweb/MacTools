@@ -252,7 +252,9 @@ private struct MenuBarIconEditorControls: View {
         let contentType = UTType(filenameExtension: url.pathExtension)
         if let contentType,
            MenuBarIconProcessing.supportedAnimationContentTypes.contains(where: { contentType.conforms(to: $0) }) {
-            iconSettings.importAnimation(from: url)
+            Task {
+                await iconSettings.importAnimation(from: url)
+            }
         } else {
             iconSettings.importIcon(from: url)
         }

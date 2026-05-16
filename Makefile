@@ -7,6 +7,8 @@ PROJECT_FILE := $(PROJECT_NAME).xcodeproj
 WORKSPACE_FILE := $(PROJECT_NAME).xcworkspace
 DERIVED_DATA := build/DerivedData
 APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(PROJECT_NAME).app
+HOST_ARCH := $(shell uname -m)
+BUILD_DESTINATION := platform=macOS,arch=$(HOST_ARCH)
 
 .PHONY: setup generate build run clean release-local
 
@@ -23,7 +25,7 @@ generate:
 	@xcodegen generate
 
 build: generate
-	@xcodebuild -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -derivedDataPath $(DERIVED_DATA) build -quiet
+	@xcodebuild -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
 
 run: build
 	@open $(APP_PATH)

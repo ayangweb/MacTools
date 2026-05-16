@@ -109,14 +109,14 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertTrue(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
     }
 
-    func testImagePayloadCacheInvalidatesWhenAnimationSpeedChanges() throws {
+    func testImagePayloadCacheInvalidatesWhenAnimationSpeedChanges() async throws {
         let sourceURL = try makeAnimatedGIFFile(name: "cache-speed.gif")
         let settings = MenuBarIconSettings(
             userDefaults: userDefaults,
             rootDirectory: rootDirectory
         )
 
-        settings.importAnimation(from: sourceURL, for: .light)
+        await settings.importAnimation(from: sourceURL, for: .light)
         XCTAssertEqual(settings.imagePayload(for: NSAppearance(named: .aqua)).manualSpeedMultiplier, 1)
 
         settings.manualAnimationSpeedMultiplier = 1.8
@@ -189,14 +189,14 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertLessThanOrEqual(highLoadMultiplier, MenuBarIconAnimationSpeedPolicy.maximumMultiplier)
     }
 
-    func testImportAnimatedGIFStoresLoopFrames() throws {
+    func testImportAnimatedGIFStoresLoopFrames() async throws {
         let sourceURL = try makeAnimatedGIFFile(name: "pulse.gif")
         let settings = MenuBarIconSettings(
             userDefaults: userDefaults,
             rootDirectory: rootDirectory
         )
 
-        settings.importAnimation(from: sourceURL, for: .light)
+        await settings.importAnimation(from: sourceURL, for: .light)
         let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
 
         XCTAssertNil(settings.lastErrorMessage)
@@ -207,14 +207,14 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertEqual(payload.frameDuration, 1.0 / MenuBarIconProcessing.animationFramesPerSecond)
     }
 
-    func testImportMP4StoresLoopFrames() throws {
+    func testImportMP4StoresLoopFrames() async throws {
         let sourceURL = try makeMP4File(name: "runner.mp4")
         let settings = MenuBarIconSettings(
             userDefaults: userDefaults,
             rootDirectory: rootDirectory
         )
 
-        settings.importAnimation(from: sourceURL, for: .light)
+        await settings.importAnimation(from: sourceURL, for: .light)
         let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
 
         XCTAssertNil(settings.lastErrorMessage)
@@ -224,14 +224,14 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertGreaterThan(payload.animationFrames.count, 1)
     }
 
-    func testLongButSmallAnimatedGIFIsAcceptedAndDownsampled() throws {
+    func testLongButSmallAnimatedGIFIsAcceptedAndDownsampled() async throws {
         let sourceURL = try makeAnimatedGIFFile(name: "slow.gif", frameDelay: 2.5)
         let settings = MenuBarIconSettings(
             userDefaults: userDefaults,
             rootDirectory: rootDirectory
         )
 
-        settings.importAnimation(from: sourceURL, for: .light)
+        await settings.importAnimation(from: sourceURL, for: .light)
         let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
 
         XCTAssertNil(settings.lastErrorMessage)
@@ -301,7 +301,7 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertTrue(payload.isAnimated)
     }
 
-    func testOversizedAnimationIsRejectedBeforeDecoding() throws {
+    func testOversizedAnimationIsRejectedBeforeDecoding() async throws {
         let url = rootDirectory.appendingPathComponent("too-large.gif")
         try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         try Data(repeating: 0, count: MenuBarIconProcessing.maxAnimationFileSize + 1).write(to: url)
@@ -310,7 +310,7 @@ final class MenuBarIconSettingsTests: XCTestCase {
             rootDirectory: rootDirectory
         )
 
-        settings.importAnimation(from: url, for: .light)
+        await settings.importAnimation(from: url, for: .light)
 
         XCTAssertFalse(settings.hasCustomIcon)
         XCTAssertEqual(settings.lastErrorMessage, MenuBarIconImportError.animationTooLarge.userMessage)

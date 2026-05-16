@@ -476,14 +476,15 @@ enum MenuBarIconProcessing {
         return bitmap.representation(using: .png, properties: [:])
     }
 
-    static func animationFrameImages(from url: URL) throws -> [NSImage] {
+    @MainActor
+    static func animationFrameImages(from url: URL) async throws -> [NSImage] {
         guard isFileSizeAcceptable(url) else {
             throw MenuBarIconImportError.animationTooLarge
         }
 
         let contentType = contentType(for: url)
         if contentType?.conforms(to: .movie) == true || contentType?.conforms(to: .audiovisualContent) == true {
-            return try videoFrameImages(from: url)
+            return try await videoFrameImages(from: url)
         }
 
         if contentType?.conforms(to: .gif) == true || url.pathExtension.lowercased() == "gif" {
@@ -638,15 +639,19 @@ enum MenuBarIconProcessing {
         return max(delay ?? (1.0 / animationFramesPerSecond), 0.02)
     }
 
-    private static func videoFrameImages(from url: URL) throws -> [NSImage] {
+    @MainActor
+    private static func videoFrameImages(from url: URL) async throws -> [NSImage] {
         let asset = AVURLAsset(url: url)
-        let duration = CMTimeGetSeconds(asset.duration)
+        let durationTime = try await asset.load(.duration)
+        let duration = CMTimeGetSeconds(durationTime)
         guard duration.isFinite, duration > 0 else {
             throw MenuBarIconImportError.cannotDecodeAnimation
         }
 
-        if let track = asset.tracks(withMediaType: .video).first {
-            let transformedSize = track.naturalSize.applying(track.preferredTransform)
+        if let track = try await asset.loadTracks(withMediaType: .video).first {
+            let naturalSize = try await track.load(.naturalSize)
+            let preferredTransform = try await track.load(.preferredTransform)
+            let transformedSize = naturalSize.applying(preferredTransform)
             let pixelArea = abs(transformedSize.width * transformedSize.height)
             guard pixelArea <= CGFloat(maxSourcePixelArea) else {
                 throw MenuBarIconImportError.animationTooLarge
@@ -862,16 +867,16 @@ final class MenuBarIconSettings: ObservableObject {
         persist()
     }
 
-    func importAnimation(from sourceURL: URL, for _: MenuBarIconAppearance) {
-        importAnimation(from: sourceURL)
+    func importAnimation(from sourceURL: URL, for _: MenuBarIconAppearance) async {
+        await importAnimation(from: sourceURL)
     }
 
-    func importAnimation(from sourceURL: URL) {
+    func importAnimation(from sourceURL: URL) async {
         clearError()
 
         let sourceFrames: [NSImage]
         do {
-            sourceFrames = try MenuBarIconProcessing.animationFrameImages(from: sourceURL)
+            sourceFrames = try await MenuBarIconProcessing.animationFrameImages(from: sourceURL)
         } catch let error as MenuBarIconImportError {
             lastErrorMessage = error.userMessage
             return
