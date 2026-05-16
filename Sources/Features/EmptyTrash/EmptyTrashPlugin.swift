@@ -1,7 +1,6 @@
 import Foundation
 import OSLog
 import SwiftUI
-import AppKit
 
 final class EmptyTrashPlugin: FeaturePlugin {
     let manifest = PluginManifest(
@@ -24,7 +23,6 @@ final class EmptyTrashPlugin: FeaturePlugin {
     private var itemCount: Int = 0
     private var isEmptying = false
     private var lastErrorMessage: String?
-    private var trashObservers: [NSObjectProtocol] = []
 
     var panelState: PluginPanelState {
         PluginPanelState(
@@ -45,7 +43,6 @@ final class EmptyTrashPlugin: FeaturePlugin {
     func refresh() {
         Task { @MainActor in
             scheduleCountRefresh()
-            setupTrashNotificationObservers()
         }
     }
 
@@ -83,23 +80,6 @@ final class EmptyTrashPlugin: FeaturePlugin {
                 }
             }
         }
-    }
-
-    @MainActor
-    private func setupTrashNotificationObservers() {
-        guard trashObservers.isEmpty else { return }
-        // NSWorkspace.didTrashItemsNotification is only available in macOS 11+
-        // Older notification name for file operations
-        let observer = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSNotification.Name("NSWorkspaceDidPerformFileOperationNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.scheduleCountRefresh()
-            }
-        }
-        trashObservers.append(observer)
     }
 
     private var subtitle: String {
