@@ -104,7 +104,7 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
 }
 
 @MainActor
-extension AppUpdater: @preconcurrency SPUUpdaterDelegate {
+extension AppUpdater: SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         guard probeContinuation != nil else {
             return
