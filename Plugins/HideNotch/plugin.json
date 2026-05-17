@@ -1,0 +1,20 @@
+{
+  "id": "hide-notch",
+  "displayName": "隐藏刘海",
+  "summary": "自动遮挡刘海屏顶部区域",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "HideNotch.bundle",
+  "factoryClass": "HideNotchPlugin.HideNotchPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "HideNotchPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}

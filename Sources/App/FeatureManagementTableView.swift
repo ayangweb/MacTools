@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 struct FeatureManagementTableView: NSViewRepresentable {
     static let rowHeight: CGFloat = 62

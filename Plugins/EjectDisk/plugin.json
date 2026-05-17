@@ -1,0 +1,20 @@
+{
+  "id": "eject-disk",
+  "displayName": "推出磁盘",
+  "summary": "推出所有可移动磁盘",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "EjectDisk.bundle",
+  "factoryClass": "EjectDiskPlugin.EjectDiskPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "EjectDiskPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}

@@ -1,10 +1,11 @@
 # GitHub Actions 自动构建
 
-本仓库提供三条流水线：
+本仓库提供四条流水线：
 
 - `Build`：在 `main` push、Pull Request 和手动触发时运行。执行 XcodeGen、Debug 测试，并在非 PR 场景额外编译 unsigned Release app 做配置校验；不上传不可分发的未签名产物。
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
-- `Deploy Pages`：仅在 `Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
+- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。构建全量插件包，使用 Developer ID 签名插件 bundle，上传 `.mactoolsplugin.zip` 到同一条 GitHub Release，并提交签名后的 `docs/plugins/catalog.json`。
+- `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
 
@@ -20,6 +21,7 @@
 | `ASC_API_KEY_ID` | App Store Connect API Key ID。 |
 | `ASC_API_ISSUER_ID` | App Store Connect Issuer ID。 |
 | `SPARKLE_PRIVATE_KEY` | Sparkle EdDSA 私钥，必须与 `project.yml` 中的 `SPARKLE_PUBLIC_ED_KEY` 配对。 |
+| `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` | 插件 catalog Ed25519 私钥的 Base64 内容，用于签名 `docs/plugins/catalog.json`。 |
 | `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，用于稳定版发布后自动向 `ggbond268/homebrew-mactools` 提交 cask 更新 PR；未配置时跳过 Homebrew 同步。 |
 
 不要把 `LocalConfig.xcconfig`、`.p12`、`.p8`、Sparkle 私钥、证书密码或 Apple ID 写入仓库。
@@ -55,7 +57,37 @@ base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | pbcopy
 
 如果你只在本机钥匙串中保存了 Sparkle 私钥，请先确认能用本机 `sign_update` 签名当前 DMG；不要为了 CI 随意生成新密钥，除非你计划同时处理已发布版本的更新兼容。
 
-## 发布方式
+## 准备插件 Catalog Secret
+
+插件 catalog 使用独立 Ed25519 key。公钥 `PLUGIN_CATALOG_PUBLIC_KEY` 可以写入 `Release.xcconfig` 并随 app 发布；私钥必须保存到 GitHub Secret `PLUGIN_CATALOG_PRIVATE_KEY_BASE64`。
+
+生成一对新的 catalog key：
+
+```bash
+python3 - <<'PY'
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
+import base64
+
+key = Ed25519PrivateKey.generate()
+private = key.private_bytes(
+    encoding=serialization.Encoding.Raw,
+    format=serialization.PrivateFormat.Raw,
+    encryption_algorithm=serialization.NoEncryption(),
+)
+public = key.public_key().public_bytes(
+    encoding=serialization.Encoding.Raw,
+    format=serialization.PublicFormat.Raw,
+)
+
+print("PLUGIN_CATALOG_PRIVATE_KEY_BASE64=" + base64.b64encode(private).decode())
+print("PLUGIN_CATALOG_PUBLIC_KEY=" + base64.b64encode(public).decode())
+PY
+```
+
+不要复用 Sparkle 私钥。Sparkle key 只负责 app 更新包，插件 catalog key 只负责插件列表。
+
+## App 发布方式
 
 `project.yml` 是发布版本源。发布前先更新：
 
@@ -82,6 +114,46 @@ git push origin v0.9.3
 Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.9.3` 一致，并使用 `CURRENT_PROJECT_VERSION` 作为 Sparkle appcast 和 App 包里的 build 号。版本不一致时会直接失败，避免产物、tag 和 appcast 不一致。
 
 也可以在 GitHub Actions 页面手动运行 `Release`，输入已存在的 tag，例如 `v0.9.3`；该 tag 指向的提交里仍必须已经更新 `project.yml`。
+
+## 插件发布方式
+
+插件按批次单独发布，不和 app DMG 混在同一条 Release。推荐每次插件发布都上传当前全量插件包，只有实际变更的插件才递增各自 `plugin.json` 中的 `version`。应用内是否显示“可更新”只比较插件版本，不比较 batch tag 或 asset URL。
+
+推送插件批次 tag：
+
+```bash
+git tag plugins-2026.05.17
+git push origin plugins-2026.05.17
+```
+
+`Plugin Release` 工作流会：
+
+1. 生成 Xcode project。
+2. 以 Release 配置构建 `Plugins/` 下的所有插件 target。
+3. 用 Developer ID 重新签名每个插件 bundle。
+4. 打包为 `*.mactoolsplugin.zip`。
+5. 创建或更新 `plugins-2026.05.17` GitHub Release，并上传所有插件 zip。
+6. 生成 release-mode `catalog.json`，其中每个插件 entry 指向本批 GitHub Release asset。
+7. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名 catalog，并写入 `docs/plugins/catalog.json`。
+8. 将 `docs/plugins/catalog.json` 提交回 `main`，再由 `Deploy Pages` 发布到 GitHub Pages。
+
+也可以在 GitHub Actions 页面手动运行 `Plugin Release`，输入已存在的 tag，例如 `plugins-2026.05.17`。
+
+插件 release asset 形态：
+
+```text
+appearance.mactoolsplugin.zip
+calendar.mactoolsplugin.zip
+disk-clean.mactoolsplugin.zip
+```
+
+每个 zip 内部保留目录包：
+
+```text
+appearance.mactoolsplugin/
+  plugin.json
+  Appearance.bundle/
+```
 
 ## Release Notes 规范
 
@@ -145,7 +217,8 @@ changed: refine menu item icon names
 
 - PR 构建不读取发布 Secrets，只执行未签名构建和测试。
 - Release 工作流只使用 `contents: write` 创建或更新 GitHub Release，并把 `docs/appcast.xml` 提交回 `main`；普通 Build 工作流只有 `contents: read`。
-- Deploy Pages 工作流只在 Release 成功后发布 `docs/`，使用 `contents: read`、`pages: write` 和 `id-token: write`。
+- Plugin Release 工作流只使用 `contents: write` 创建或更新插件批次 Release，并把签名后的 `docs/plugins/catalog.json` 提交回 `main`。
+- Deploy Pages 工作流只在 Release 或 Plugin Release 成功后发布 `docs/`，使用 `contents: read`、`pages: write` 和 `id-token: write`。
 - 签名证书导入临时 keychain，任务结束后清理。
-- App Store Connect `.p8` 和 Sparkle 私钥只写入 runner 临时目录，使用后删除。
+- App Store Connect `.p8`、Sparkle 私钥和插件 catalog 私钥只写入 runner 临时目录或进程环境，使用后删除。
 - 日志不主动输出 Team ID、Bundle 前缀、证书名称、私钥或证书内容。

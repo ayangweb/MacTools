@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 @MainActor
@@ -95,7 +96,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
 
         XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
-        XCTAssertNil(host.selectedPluginConfigurationID)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
     }
 
     func testConfigurationListUsesSharedPluginOrderAndSelectsFirstItem() {
@@ -129,12 +130,35 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let host = makeHost(plugins: [first, second])
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["first", "second"])
-        XCTAssertEqual(host.selectedPluginConfigurationID, "first")
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
 
         host.moveFeatureManagementItem(id: "second", toOffset: 0)
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["second", "first"])
-        XCTAssertEqual(host.selectedPluginConfigurationID, "first")
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+    }
+
+    func testFeatureSettingsSelectionIgnoresMissingConfigurationItem() {
+        let componentPanelPlugin = MockComponentPanelPlugin(
+            id: "component",
+            permissionRequirements: [
+                PluginPermissionRequirement(
+                    id: "accessibility",
+                    kind: .accessibility,
+                    title: "辅助功能",
+                    description: "需要辅助功能权限。"
+                )
+            ]
+        )
+        let host = makeHost(plugins: [componentPanelPlugin])
+
+        host.selectFeatureSettingsPane(.configuration("missing"))
+
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+
+        host.selectFeatureSettingsPane(.configuration("component"))
+
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .configuration("component"))
     }
 
     func testCustomPluginConfigurationContributesConfigurationItemAndCachesView() {
@@ -219,6 +243,41 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.map(\.presentation), [.featureAndComponentPanel])
     }
 
+    func testDynamicPluginManagerCanRemoveEnabledPluginFromDerivedState() {
+        let firstPlugin = MockPrimaryPanelPlugin(id: "dynamic")
+        let secondPlugin = MockPrimaryPanelPlugin(id: "second")
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        let store = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: UserDefaults(suiteName: suiteName)!,
+            hostVersion: "1.0.0"
+        )
+        let dynamicRecord = installTestPluginPackage(id: "dynamic", bundleName: "Dynamic.bundle", store: store)
+        _ = installTestPluginPackage(id: "second", bundleName: "Second.bundle", store: store)
+        let loader = StubDynamicPluginLoader { records in
+            records.map { record in
+                let plugin = record.id == "dynamic" ? firstPlugin : secondPlugin
+
+                return DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
+            }
+        }
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: loader
+        )
+        let host = makeHost(plugins: [], dynamicPluginManager: manager)
+
+        XCTAssertEqual(host.panelItems.map(\.id), ["dynamic", "second"])
+
+        try? FileManager.default.removeItem(at: dynamicRecord.packageURL)
+        manager.reloadInstalledPlugins()
+
+        XCTAssertEqual(host.panelItems.map(\.id), ["second"])
+        XCTAssertEqual(host.featureManagementItems.map(\.id), ["second"])
+        try? FileManager.default.removeItem(at: rootDirectory)
+    }
+
     func testDisplayConfigurationChangeRefreshesOnlyDisplayTopologyPlugins() async throws {
         let displayPlugin = MockDisplayTopologyPlugin(id: "display")
         let regularPlugin = MockPrimaryPanelPlugin(id: "feature")
@@ -262,6 +321,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
     private func makeHost(
         plugins: [any MacToolsPlugin] = [],
+        dynamicPluginManager: DynamicPluginManager? = nil,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) -> PluginHost {
@@ -270,12 +330,53 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         return PluginHost(
             plugins: plugins,
+            dynamicPluginManager: dynamicPluginManager,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: displayConfigurationObserver,
             displayTopologyRefreshDelay: displayTopologyRefreshDelay
         )
+    }
+
+    private func installTestPluginPackage(
+        id: String,
+        bundleName: String,
+        store: PluginPackageStore
+    ) -> PluginPackageRecord {
+        let sourceURL = store.rootDirectory
+            .appendingPathComponent("Source", isDirectory: true)
+            .appendingPathComponent(id, isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        let bundleURL = sourceURL.appendingPathComponent(bundleName, isDirectory: true)
+        try? FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+
+        let manifest = PluginPackageManifest(
+            id: id,
+            displayName: id,
+            version: "1.0.0",
+            minHostVersion: "0.1.0",
+            bundleRelativePath: bundleName
+        )
+        let data = try? JSONEncoder().encode(manifest)
+        try? data?.write(to: sourceURL.appendingPathComponent("plugin.json"))
+
+        return try! store.installPackage(from: sourceURL)
+    }
+}
+
+@MainActor
+private final class StubDynamicPluginLoader: DynamicPluginLoading {
+    private let handler: ([PluginPackageRecord]) -> [DynamicPluginLoadResult]
+    private(set) var receivedRecordIDs: [String] = []
+
+    init(handler: @escaping ([PluginPackageRecord]) -> [DynamicPluginLoadResult]) {
+        self.handler = handler
+    }
+
+    func loadInstalledPlugins(from records: [PluginPackageRecord]) -> [DynamicPluginLoadResult] {
+        receivedRecordIDs = records.map(\.id)
+        return handler(records)
     }
 }
 

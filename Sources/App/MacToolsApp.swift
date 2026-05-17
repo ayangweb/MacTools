@@ -38,5 +38,6 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         statusItemController?.dismissPanels()
+        pluginHost.dynamicPluginManager?.deactivateAll()
     }
 }

@@ -26,6 +26,8 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>MTPluginCatalogPublicKey</key>
+	<string>$(PLUGIN_CATALOG_PUBLIC_KEY)</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>点击日历日期时需要控制系统日历应用并定位到对应日期。</string>
 	<key>NSCalendarsUsageDescription</key>
@@ -40,5 +42,25 @@
 	<string>https://ggbond268.github.io/MacTools/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.directory</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>MacTools Plugin</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.ggbond.mactools.plugin-package</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>mactoolsplugin</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

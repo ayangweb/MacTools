@@ -7,11 +7,6 @@ protocol DisplayConfigurationObserving: AnyObject {
 }
 
 @MainActor
-protocol DisplayTopologyRefreshing {
-    func refreshDisplayTopology()
-}
-
-@MainActor
 final class SystemDisplayConfigurationObserver: DisplayConfigurationObserving {
     var onConfigurationChange: (() -> Void)?
 

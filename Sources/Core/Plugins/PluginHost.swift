@@ -1,6 +1,13 @@
 import Combine
 import Foundation
 import SwiftUI
+import MacToolsPluginKit
+
+enum FeatureSettingsPane: Hashable {
+    case installed
+    case marketplace
+    case configuration(String)
+}
 
 @MainActor
 final class PluginHost: ObservableObject {
@@ -17,14 +24,17 @@ final class PluginHost: ObservableObject {
         let plugin: any MacToolsPlugin
     }
 
-    private let plugins: [any MacToolsPlugin]
+    private let builtInPlugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
     private let displayTopologyRefreshDelay: Duration
+    let dynamicPluginManager: DynamicPluginManager?
+    private let pluginCatalogManager: PluginCatalogManager?
 
+    private var dynamicPlugins: [any MacToolsPlugin] = []
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
@@ -38,14 +48,20 @@ final class PluginHost: ObservableObject {
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
+    @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
+    @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var hasActivePlugin = false
     @Published private(set) var settingsPresentationRequestCount = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
-    @Published var selectedPluginConfigurationID: String?
+    @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
 
     convenience init() {
+        let dynamicPluginManager = DynamicPluginManager()
+        let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
         self.init(
             plugins: BuiltInPluginRegistry().makePlugins(),
+            dynamicPluginManager: dynamicPluginManager,
+            pluginCatalogManager: pluginCatalogManager,
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
             globalShortcutManager: GlobalShortcutManager(),
@@ -56,6 +72,8 @@ final class PluginHost: ObservableObject {
 
     init(
         plugins: [any MacToolsPlugin],
+        dynamicPluginManager: DynamicPluginManager? = nil,
+        pluginCatalogManager: PluginCatalogManager? = nil,
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
         globalShortcutManager: GlobalShortcutManager,
@@ -63,7 +81,7 @@ final class PluginHost: ObservableObject {
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) {
-        self.plugins = plugins.sorted {
+        self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
                 return $0.metadata.title.localizedCompare($1.metadata.title) == .orderedAscending
             }
@@ -76,18 +94,18 @@ final class PluginHost: ObservableObject {
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
+        self.dynamicPluginManager = dynamicPluginManager
+        self.pluginCatalogManager = pluginCatalogManager
 
-        for plugin in self.plugins {
-            let pluginID = plugin.metadata.id
+        configureCallbacks(for: self.builtInPlugins)
 
-            plugin.onStateChange = { [weak self] in
-                self?.rebuildDerivedStateAfterPluginChange()
-            }
-            plugin.requestPermissionGuidance = { [weak self] permissionID in
-                self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
-            }
-            plugin.shortcutBindingResolver = { [weak self] shortcutDefinitionID in
-                self?.resolvedBinding(forPluginID: pluginID, shortcutDefinitionID: shortcutDefinitionID)
+        if let dynamicPluginManager {
+            self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+            self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
+            self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
+            configureCallbacks(for: self.dynamicPlugins)
+            dynamicPluginManager.onPluginsChanged = { [weak self] plugins in
+                self?.replaceDynamicPlugins(plugins)
             }
         }
 
@@ -282,9 +300,34 @@ final class PluginHost: ObservableObject {
             return
         }
 
+        selectFeatureSettingsPane(.configuration(pluginID))
         selectedSettingsDestination = .pluginConfiguration
-        selectedPluginConfigurationID = pluginID
         settingsPresentationRequestCount += 1
+    }
+
+    func presentPluginMarketplace() {
+        selectedFeatureSettingsPane = .marketplace
+        selectedSettingsDestination = .pluginConfiguration
+        settingsPresentationRequestCount += 1
+    }
+
+    func presentInstalledPlugins() {
+        selectedFeatureSettingsPane = .installed
+        selectedSettingsDestination = .pluginConfiguration
+        settingsPresentationRequestCount += 1
+    }
+
+    func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) {
+        switch pane {
+        case .installed, .marketplace:
+            selectedFeatureSettingsPane = pane
+        case let .configuration(pluginID):
+            guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
+                return
+            }
+
+            selectedFeatureSettingsPane = pane
+        }
     }
 
     func clearShortcutError(for shortcutID: String) {
@@ -412,7 +455,7 @@ final class PluginHost: ObservableObject {
             return cachedItem
         }
 
-        let configurations = plugins
+        let configurations = orderedCorePlugins()
             .filter { $0.metadata.id == pluginID }
             .compactMap(\.configuration)
 
@@ -428,7 +471,7 @@ final class PluginHost: ObservableObject {
             let views = configurations.map { $0.makeView(context) }
             content = AnyView(
                 VStack(alignment: .leading, spacing: 16) {
-                    ForEach(Array(views.enumerated()), id: \.offset) { entry in
+                    ForEach(Swift.Array(views.enumerated()), id: \.offset) { entry in
                         entry.element
                     }
                 }
@@ -444,6 +487,57 @@ final class PluginHost: ObservableObject {
         componentViewCache.removeAll()
     }
 
+    func refreshPluginCatalog() async {
+        await pluginCatalogManager?.refreshCatalog()
+        syncPluginManagementState()
+    }
+
+    func installPluginFromCatalog(pluginID: String) async throws {
+        guard let pluginCatalogManager else {
+            return
+        }
+
+        try await pluginCatalogManager.installPlugin(id: pluginID)
+        syncPluginManagementState()
+    }
+
+    func updatePluginFromCatalog(pluginID: String) async throws {
+        guard let pluginCatalogManager else {
+            return
+        }
+
+        try await pluginCatalogManager.updatePlugin(id: pluginID)
+        syncPluginManagementState()
+    }
+
+    func installPluginPackage(from sourceURL: URL) throws {
+        try dynamicPluginManager?.installPluginPackage(from: sourceURL)
+        pluginCatalogManager?.rebuildManagementItems()
+        syncPluginManagementState()
+    }
+
+    func updatePluginPackage(from sourceURL: URL) throws {
+        try dynamicPluginManager?.updatePluginPackage(from: sourceURL)
+        pluginCatalogManager?.rebuildManagementItems()
+        syncPluginManagementState()
+    }
+
+    func setDynamicPluginEnabled(_ isEnabled: Bool, pluginID: String) {
+        dynamicPluginManager?.setPluginEnabled(isEnabled, pluginID: pluginID)
+        pluginCatalogManager?.rebuildManagementItems()
+        syncPluginManagementState()
+    }
+
+    func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
+        try dynamicPluginManager?.uninstallPlugin(pluginID: pluginID, removeData: removeData)
+        pluginCatalogManager?.rebuildManagementItems()
+        syncPluginManagementState()
+    }
+
+    private var plugins: [any MacToolsPlugin] {
+        builtInPlugins + dynamicPlugins
+    }
+
     private func plugin(for pluginID: String) -> (any PluginPrimaryPanel)? {
         plugins.first(where: { $0.metadata.id == pluginID })?.primaryPanel
     }
@@ -454,6 +548,43 @@ final class PluginHost: ObservableObject {
 
     private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {
         plugins.first(where: { $0.metadata.id == pluginID })
+    }
+
+    private func configureCallbacks(for plugins: [any MacToolsPlugin]) {
+        for plugin in plugins {
+            let pluginID = plugin.metadata.id
+
+            plugin.onStateChange = { [weak self] in
+                self?.rebuildDerivedStateAfterPluginChange()
+            }
+            plugin.requestPermissionGuidance = { [weak self] permissionID in
+                self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
+            }
+            plugin.shortcutBindingResolver = { [weak self] shortcutDefinitionID in
+                self?.resolvedBinding(forPluginID: pluginID, shortcutDefinitionID: shortcutDefinitionID)
+            }
+        }
+    }
+
+    private func replaceDynamicPlugins(_ plugins: [any MacToolsPlugin]) {
+        discardComponentViews()
+        configurationViewCache.removeAll()
+        syncPluginManagementState()
+        dynamicPlugins = plugins.sorted {
+            if $0.metadata.order == $1.metadata.order {
+                return $0.metadata.title.localizedCompare($1.metadata.title) == .orderedAscending
+            }
+
+            return $0.metadata.order < $1.metadata.order
+        }
+        configureCallbacks(for: dynamicPlugins)
+        rebuildDerivedState()
+        syncGlobalShortcuts()
+    }
+
+    private func syncPluginManagementState() {
+        pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
+        pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
 
     private func rebuildDerivedState() {
@@ -639,7 +770,7 @@ final class PluginHost: ObservableObject {
         // 清空所有配置视图缓存，确保状态改变时视图能刷新
         configurationViewCache.removeAll()
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
-        syncSelectedPluginConfigurationID()
+        syncSelectedFeatureSettingsPane()
 
         hasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
             || componentStatesByID.values.contains(where: \.isActive)
@@ -767,7 +898,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func orderedPlugins() -> [any MacToolsPlugin] {
-        let pluginsByID = Dictionary(uniqueKeysWithValues: plugins.map { ($0.metadata.id, $0) })
+        let pluginsByID = pluginsByID()
 
         return orderedPluginIDs().compactMap { pluginsByID[$0] }
     }
@@ -777,11 +908,29 @@ final class PluginHost: ObservableObject {
     }
 
     private func orderedPluginDescriptors() -> [PluginDescriptor] {
-        let descriptorsByID = Dictionary(
-            uniqueKeysWithValues: defaultPluginDescriptors().map { ($0.metadata.id, $0) }
-        )
+        let descriptorsByID = descriptorsByID()
 
         return orderedPluginIDs().compactMap { descriptorsByID[$0] }
+    }
+
+    private func pluginsByID() -> [String: any MacToolsPlugin] {
+        plugins.reduce(into: [String: any MacToolsPlugin]()) { result, plugin in
+            let id = plugin.metadata.id
+
+            if result[id] == nil {
+                result[id] = plugin
+            }
+        }
+    }
+
+    private func descriptorsByID() -> [String: PluginDescriptor] {
+        defaultPluginDescriptors().reduce(into: [String: PluginDescriptor]()) { result, descriptor in
+            let id = descriptor.metadata.id
+
+            if result[id] == nil {
+                result[id] = descriptor
+            }
+        }
     }
 
     private func defaultPluginDescriptors() -> [PluginDescriptor] {
@@ -819,14 +968,15 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func syncSelectedPluginConfigurationID() {
-        let availableIDs = Set(pluginConfigurationItems.map(\.id))
-
-        if let selectedPluginConfigurationID, availableIDs.contains(selectedPluginConfigurationID) {
+    private func syncSelectedFeatureSettingsPane() {
+        guard case let .configuration(pluginID) = selectedFeatureSettingsPane else {
             return
         }
 
-        selectedPluginConfigurationID = pluginConfigurationItems.first?.id
+        let availableIDs = Set(pluginConfigurationItems.map(\.id))
+        if !availableIDs.contains(pluginID) {
+            selectedFeatureSettingsPane = .installed
+        }
     }
 
     private func shortcutDescriptor(for shortcutID: String) -> ShortcutDescriptor? {

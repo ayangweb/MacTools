@@ -1,0 +1,23 @@
+{
+  "id": "calendar",
+  "displayName": "日历",
+  "summary": "查看日期、节假日和系统日程",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "Calendar.bundle",
+  "factoryClass": "CalendarPlugin.CalendarPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "CalendarPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": true,
+    "configuration": false
+  },
+  "permissions": [
+    "calendarFullAccess",
+    "automation"
+  ]
+}

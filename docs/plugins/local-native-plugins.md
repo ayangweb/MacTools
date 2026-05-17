@@ -1,0 +1,92 @@
+# MacTools Local Native Plugins
+
+MacTools supports trusted local native plugins through a host-owned package store and a shared `MacToolsPluginKit.framework`.
+
+This phase intentionally supports only trusted local plugins built by the same developer identity as the host app. The host validates the plugin bundle signature before loading code. Disabling or uninstalling a plugin immediately removes its contributions from the UI and deletes package files when requested, while already-loaded native code is fully released after the app restarts.
+
+For catalog-based installation, GitHub release distribution, and Debug `file://` development catalogs, see [plugin-catalog.md](plugin-catalog.md).
+
+## Package Layout
+
+Use a directory package with the `.mactoolsplugin` extension:
+
+```text
+Example.mactoolsplugin/
+  plugin.json
+  Example.bundle/
+    Contents/
+      Info.plist
+      MacOS/Example
+      Resources/
+```
+
+`plugin.json` is read before loading executable code:
+
+```json
+{
+  "id": "com.example.mactools.demo",
+  "displayName": "Demo",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "Example.bundle",
+  "factoryClass": "Example.ExamplePluginFactory",
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": []
+}
+```
+
+The plugin bundle must expose a factory that conforms to `MacToolsPluginBundleFactory`. The factory returns a `PluginProvider`, and the provider returns one or more `MacToolsPlugin` instances.
+
+Source repositories can keep implementation and tests beside each plugin:
+
+```text
+Plugins/Example/
+  plugin.json
+  Sources/
+  Bundle/
+  Tests/
+```
+
+Only `plugin.json` and the built `.bundle` are copied into a `.mactoolsplugin` package. `Tests/` is included only by the host unit-test target during development and is never packaged into the app or plugin distribution.
+
+## Install Location
+
+Installed plugins are copied into:
+
+```text
+~/Library/Application Support/MacTools/Plugins/
+  Installed/
+  Staging/
+  Data/
+  Caches/
+  Temporary/
+```
+
+Install and update are staged before moving into `Installed`. Per-plugin runtime context includes scoped `UserDefaults` storage plus support, cache, temporary, and bundle resource locations.
+
+## Security Model
+
+- Only local package directories ending in `.mactoolsplugin` are accepted.
+- The manifest ID and bundle relative path are validated before loading code.
+- Host version and plugin kit version are checked before loading code.
+- The plugin bundle signature is validated before loading code.
+- When the host has a Team ID, the plugin bundle must have the same Team ID.
+- Untrusted third-party native plugins should use a future isolated process or XPC model instead of in-process bundle loading.
+
+## Lifecycle
+
+Plugins can implement:
+
+```swift
+func activate(context: PluginRuntimeContext)
+func deactivate(reason: PluginDeactivationReason)
+```
+
+`deactivate` is called before disabling, updating, uninstalling, and host shutdown. Plugins should cancel tasks, timers, observers, event taps, windows, and other retained system resources there.
+
+Native bundle code is treated as loaded for the lifetime of the current app process. If a loaded plugin is disabled, updated, or uninstalled, its contributions are removed from MacTools immediately and `deactivate` is called, but the executable code is considered fully released only after the app restarts. Updating a loaded plugin replaces the package files on disk and activates the new code on the next launch.

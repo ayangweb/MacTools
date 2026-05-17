@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import MacToolsPluginKit
 
 enum MenuBarStatusItemInvocation: Equatable {
     case featurePanel

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 @MainActor
@@ -50,6 +51,29 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
             plugin.receivedActions,
             [.invokeAction(controlID: "open-system-settings")]
         )
+    }
+
+    func testPresentPluginMarketplaceSelectsMarketplaceSettings() {
+        let plugin = MockNavigationPlugin()
+        let host = makeHost(plugin: plugin)
+
+        host.presentPluginMarketplace()
+
+        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .marketplace)
+        XCTAssertEqual(host.settingsPresentationRequestCount, 1)
+    }
+
+    func testPresentInstalledPluginsSelectsInstalledSettings() {
+        let plugin = MockNavigationPlugin()
+        let host = makeHost(plugin: plugin)
+
+        host.presentPluginMarketplace()
+        host.presentInstalledPlugins()
+
+        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+        XCTAssertEqual(host.settingsPresentationRequestCount, 2)
     }
 
     private func makeHost(plugin: MockNavigationPlugin) -> PluginHost {

@@ -11,13 +11,6 @@ protocol AccessibilityPermissionObserving: AnyObject {
     var onPermissionChange: (() -> Void)? { get set }
 }
 
-/// 插件声明自身关心辅助功能权限，`PluginHost` 在权限变化时调用 `refreshAccessibilityPermission()`。
-/// 与 `DisplayTopologyRefreshing` 对应。
-@MainActor
-protocol AccessibilityPermissionRefreshing {
-    func refreshAccessibilityPermission()
-}
-
 // MARK: - Concrete Observer
 
 /// 以 1 秒间隔轮询 `AXIsProcessTrusted()`，状态变化时通知宿主。

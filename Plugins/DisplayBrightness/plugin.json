@@ -1,0 +1,20 @@
+{
+  "id": "display-brightness",
+  "displayName": "显示器亮度",
+  "summary": "快速调节每个显示器的亮度",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "DisplayBrightness.bundle",
+  "factoryClass": "DisplayBrightnessPlugin.DisplayBrightnessPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "DisplayBrightnessPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 struct ComponentGridPlacement: Identifiable, Equatable {
     let id: String
@@ -203,22 +204,17 @@ struct ComponentPanelContent: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "square.stack.3d.up.slash")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.tertiary)
-
-            VStack(spacing: 4) {
-                Text("暂无组件")
-                    .font(.system(size: 14, weight: .semibold))
-
-                Text("启用组件后会显示在这里。")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+        PanelPluginEmptyState(
+            title: "暂无组件",
+            systemImage: "square.grid.2x2",
+            iconTint: .purple,
+            onInstall: {
+                pluginHost.presentPluginMarketplace()
+            },
+            onEnable: {
+                pluginHost.presentInstalledPlugins()
             }
-        }
+        )
         .frame(minHeight: ComponentPanelLayout.emptyContentHeight)
         .frame(maxWidth: .infinity)
     }

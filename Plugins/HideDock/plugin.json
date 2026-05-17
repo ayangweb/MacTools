@@ -1,0 +1,19 @@
+{
+  "id": "hide-dock",
+  "displayName": "隐藏 Dock",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "HideDock.bundle",
+  "factoryClass": "HideDockPlugin.HideDockPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "HideDockPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 final class MenuBarPanelLayoutTests: XCTestCase {
@@ -112,6 +113,13 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(
             MenuBarPanelLayout.contentSize(for: [expandedNavigationItem, collapsedItem]),
             NSSize(width: 288, height: 298)
+        )
+    }
+
+    func testEmptyContentSizeIncludesMarketplacePrompt() {
+        XCTAssertEqual(
+            MenuBarPanelLayout.contentSize(for: []),
+            NSSize(width: 288, height: 247)
         )
     }
 

@@ -1,0 +1,20 @@
+{
+  "id": "ClipboardClear",
+  "displayName": "清空剪贴板",
+  "summary": "一键清空当前剪贴板内容",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "ClipboardClear.bundle",
+  "factoryClass": "ClipboardClearPlugin.ClipboardClearPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "ClipboardClearPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}

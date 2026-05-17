@@ -7,10 +7,22 @@ PROJECT_FILE := $(PROJECT_NAME).xcodeproj
 WORKSPACE_FILE := $(PROJECT_NAME).xcworkspace
 DERIVED_DATA := build/DerivedData
 APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(PROJECT_NAME).app
+APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(PROJECT_NAME)
 HOST_ARCH := $(shell uname -m)
 BUILD_DESTINATION := platform=macOS,arch=$(HOST_ARCH)
+LOCAL_PLUGIN_SOURCE_DIR ?= Plugins
+LOCAL_PLUGIN_BUILD_DIR ?= build/LocalPlugins
+LOCAL_PLUGIN_CATALOG := $(LOCAL_PLUGIN_BUILD_DIR)/catalog.dev.json
+PLUGIN_RELEASE_REPO ?= ggbond268/MacTools
+PLUGIN_RELEASE_TAG ?= plugins-local
+PLUGIN_RELEASE_BUILD_DIR ?= build/PluginRelease/Build
+PLUGIN_RELEASE_DIST_DIR ?= build/PluginRelease
+PLUGIN_RELEASE_ASSETS_DIR ?= $(PLUGIN_RELEASE_DIST_DIR)/Assets
+PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
+PLUGIN_RELEASE_SIGNED_CATALOG ?= docs/plugins/catalog.json
+PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
-.PHONY: setup generate build run clean release-local
+.PHONY: setup generate build build-plugin build-plugins package-plugins-release run run-open clean release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -27,7 +39,47 @@ generate:
 build: generate
 	@xcodebuild -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
 
+build-plugin: generate
+	@if [ -n "$(PLUGIN)" ]; then \
+		PLUGIN_ARGS=(--plugin "$(PLUGIN)"); \
+	else \
+		PLUGIN_ARGS=(); \
+	fi; \
+	./scripts/plugins/build-local-plugins.sh \
+		--source-dir "$(LOCAL_PLUGIN_SOURCE_DIR)" \
+		--output-dir "$(LOCAL_PLUGIN_BUILD_DIR)" \
+		--destination "$(BUILD_DESTINATION)" \
+		$${PLUGIN_ARGS[@]}
+
+build-plugins: build-plugin
+
+package-plugins-release: generate
+	@./scripts/plugins/build-plugin-release-assets.sh \
+		--source-dir "$(LOCAL_PLUGIN_SOURCE_DIR)" \
+		--build-dir "$(PLUGIN_RELEASE_BUILD_DIR)" \
+		--dist-dir "$(PLUGIN_RELEASE_DIST_DIR)" \
+		--assets-dir "$(PLUGIN_RELEASE_ASSETS_DIR)" \
+		--base-url "$(PLUGIN_RELEASE_BASE_URL)" \
+		--catalog-output "$(PLUGIN_RELEASE_CATALOG)" \
+		--signed-catalog-output "$(PLUGIN_RELEASE_SIGNED_CATALOG)" \
+		--sign-identity "$(PLUGIN_CODE_SIGN_IDENTITY)" \
+		--destination "$(BUILD_DESTINATION)" \
+		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
+
 run: build
+	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \
+	if [ -z "$$CATALOG_URL" ] && [ -f "$(LOCAL_PLUGIN_CATALOG)" ]; then \
+		CATALOG_URL="file://$(abspath $(LOCAL_PLUGIN_CATALOG))"; \
+	fi; \
+	if [ -n "$$CATALOG_URL" ]; then \
+		echo "Using plugin catalog: $$CATALOG_URL"; \
+		MACTOOLS_PLUGIN_CATALOG_URL="$$CATALOG_URL" "$(APP_EXECUTABLE)"; \
+	else \
+		echo "No local plugin catalog found. Run 'make build-plugin' or set MACTOOLS_PLUGIN_CATALOG_URL."; \
+		"$(APP_EXECUTABLE)"; \
+	fi
+
+run-open: build
 	@open $(APP_PATH)
 
 clean:

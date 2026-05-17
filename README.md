@@ -7,9 +7,9 @@
 
 ## 截图
 
-|                                   菜单栏功能面板                                    |                                              组件仪表盘                                              |                                        设置与功能                                         |                                       关于与更新                                        |
+|                                   菜单栏功能面板                                    |                                              组件仪表盘                                              |                                        设置与插件                                         |                                       关于与更新                                        |
 | :---------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------: |
-| <img src="docs/assets/screenshots/menu-panel.png" width="220" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="220" alt="日历与系统状态组件面板"> | <img src="docs/assets/screenshots/settings-general.png" width="220" alt="设置与功能页面"> | <img src="docs/assets/screenshots/settings-about.png" width="220" alt="关于与更新页面"> |
+| <img src="docs/assets/screenshots/menu-panel.png" width="220" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="220" alt="日历与系统状态组件面板"> | <img src="docs/assets/screenshots/settings-general.png" width="220" alt="设置与插件页面"> | <img src="docs/assets/screenshots/settings-about.png" width="220" alt="关于与更新页面"> |
 
 ## 功能
 
@@ -32,7 +32,7 @@
 | 启动项管理       | 可视化查看 LaunchAgent/LaunchDaemon，支持搜索筛选、字段解释和用户级启动项启停管理。                             |
 | 日历组件         | 在组件面板中查看月历、农历、节假日与当天日程。                                                                  |
 | 系统状态         | 展示 CPU、内存、磁盘、电量、网络速率与高占用进程。                                                              |
-| 功能与设置       | 管理功能显示顺序，并在各功能面板中维护权限、快捷键和插件专属设置。                                              |
+| 插件与设置       | 在插件市场中管理已安装插件，并在各插件设置页维护权限、快捷键和专属设置。                                        |
 | 状态栏图标自定义 | 上传本地图片或轻量 GIF/MP4 动画作为菜单栏图标，也可选择内置动态图标，并支持自动扣背景、播放速度调整和恢复默认。 |
 
 ## 特性
@@ -81,6 +81,7 @@ xcodebuild -project MacTools.xcodeproj -scheme MacTools -configuration Debug -de
 
 贡献、测试和发布流程请参考 [CONTRIBUTING.md](CONTRIBUTING.md)。
 GitHub Actions 自动构建与发布配置请参考 [docs/github-actions.md](docs/github-actions.md)。
+插件 catalog、包结构和批次发布流程请参考 [docs/plugins/plugin-catalog.md](docs/plugins/plugin-catalog.md)。
 
 ## 许可证
 

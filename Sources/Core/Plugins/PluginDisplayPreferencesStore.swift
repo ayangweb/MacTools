@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 final class PluginDisplayPreferencesStore {

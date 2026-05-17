@@ -1,5 +1,5 @@
-import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 struct SettingsView: View {
     @ObservedObject var pluginHost: PluginHost
@@ -9,7 +9,6 @@ struct SettingsView: View {
     var body: some View {
         TabView(selection: $pluginHost.selectedSettingsDestination) {
             GeneralSettingsView(
-                pluginHost: pluginHost,
                 menuBarIconSettings: menuBarIconSettings
             )
                 .tag(SettingsDestination.general)
@@ -17,10 +16,10 @@ struct SettingsView: View {
                     Label("通用", systemImage: "gearshape")
                 }
 
-            PluginConfigurationSettingsView(pluginHost: pluginHost)
+            FeatureSettingsView(pluginHost: pluginHost)
                 .tag(SettingsDestination.pluginConfiguration)
                 .tabItem {
-                    Label("功能", systemImage: "slider.horizontal.3")
+                    Label("插件", systemImage: "slider.horizontal.3")
                 }
 
             AboutSettingsView(appUpdater: appUpdater)
@@ -77,7 +76,6 @@ private struct PermissionSettingsRow: View {
 }
 
 struct GeneralSettingsView: View {
-    @ObservedObject var pluginHost: PluginHost
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
 
@@ -94,27 +92,8 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("状态栏图标")
             }
-
-            Section {
-                FeatureManagementTableView(
-                    items: pluginHost.featureManagementItems,
-                    onVisibilityChange: { pluginID, isVisible in
-                        pluginHost.setFeatureVisibility(isVisible, for: pluginID)
-                    },
-                    onMove: { pluginID, targetOffset in
-                        pluginHost.moveFeatureManagementItem(id: pluginID, toOffset: targetOffset)
-                    }
-                )
-                .frame(height: featureManagementListHeight)
-            } header: {
-                Text("功能列表")
-            }
         }
         .formStyle(.grouped)
-    }
-
-    private var featureManagementListHeight: CGFloat {
-        FeatureManagementTableView.preferredHeight(for: pluginHost.featureManagementItems.count)
     }
 
     private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
@@ -170,100 +149,147 @@ private struct AppearanceSettingsRow: View {
     }
 }
 
-private struct PluginConfigurationSettingsView: View {
+private struct FeatureSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
 
     var body: some View {
         HStack(spacing: 0) {
-            PluginConfigurationSidebar(
-                items: pluginHost.pluginConfigurationItems,
-                selectedID: $pluginHost.selectedPluginConfigurationID
+            FeatureSettingsSidebar(
+                configurationItems: pluginHost.pluginConfigurationItems,
+                selection: selectionBinding
             )
-            .frame(width: 210)
+            .frame(width: 220)
 
             Rectangle()
                 .fill(SettingsStyle.separator)
                 .frame(width: 1)
 
-            PluginConfigurationDetailPane(
-                pluginHost: pluginHost,
-                item: selectedItem
-            )
+            FeatureSettingsDetailPane(pluginHost: pluginHost)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.windowBackground)
     }
 
-    private var selectedItem: PluginConfigurationItem? {
-        guard let selectedID = pluginHost.selectedPluginConfigurationID else {
-            return pluginHost.pluginConfigurationItems.first
+    private var selectionBinding: Binding<FeatureSettingsPane> {
+        Binding {
+            pluginHost.selectedFeatureSettingsPane
+        } set: { selection in
+            pluginHost.selectFeatureSettingsPane(selection)
         }
-
-        return pluginHost.pluginConfigurationItems.first(where: { $0.id == selectedID })
-            ?? pluginHost.pluginConfigurationItems.first
     }
 }
 
-private struct PluginConfigurationSidebar: View {
-    let items: [PluginConfigurationItem]
-    @Binding var selectedID: String?
+private struct FeatureSettingsSidebar: View {
+    let configurationItems: [PluginConfigurationItem]
+    @Binding var selection: FeatureSettingsPane
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(items) { item in
-                        Button {
-                            selectedID = item.id
-                        } label: {
-                            PluginConfigurationSidebarRow(
-                                item: item,
-                                isSelected: selectedID == item.id
-                            )
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 4) {
+                FeatureSettingsSidebarSectionTitle("插件市场")
+                    .padding(.top, 14)
+
+                FeatureSettingsSidebarRow(
+                    title: "已安装",
+                    systemImage: "checkmark.circle",
+                    iconTint: .green,
+                    isSelected: selection == .installed
+                ) {
+                    selection = .installed
+                }
+
+                FeatureSettingsSidebarRow(
+                    title: "市场",
+                    systemImage: "shippingbox",
+                    iconTint: .blue,
+                    isSelected: selection == .marketplace
+                ) {
+                    selection = .marketplace
+                }
+
+                FeatureSettingsSidebarSectionTitle("插件设置")
+                    .padding(.top, 16)
+
+                if configurationItems.isEmpty {
+                    Text("暂无可设置插件")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(configurationItems) { item in
+                        FeatureSettingsSidebarRow(
+                            title: item.title,
+                            systemImage: item.iconName,
+                            iconTint: item.iconTint,
+                            isSelected: selection == .configuration(item.id)
+                        ) {
+                            selection = .configuration(item.id)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 14)
-                .padding(.bottom, 14)
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 14)
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(SettingsStyle.sidebarBackground)
     }
 }
 
-private struct PluginConfigurationSidebarRow: View {
-    let item: PluginConfigurationItem
+private struct FeatureSettingsSidebarSectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 4)
+    }
+}
+
+private struct FeatureSettingsSidebarRow: View {
+    let title: String
+    let systemImage: String
+    let iconTint: Color
     let isSelected: Bool
+    let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: item.iconName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isSelected ? Color.accentColor : item.iconTint)
-                .frame(width: 18, height: 18)
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.accentColor : iconTint)
+                    .frame(width: 18, height: 18)
 
-            Text(item.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(rowBackground)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(rowBackground)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help(item.title)
+        .help(title)
     }
 
     private var rowBackground: Color {
@@ -272,6 +298,95 @@ private struct PluginConfigurationSidebarRow: View {
         }
 
         return isHovered ? SettingsStyle.sidebarHoverBackground : .clear
+    }
+}
+
+private struct FeatureSettingsDetailPane: View {
+    @ObservedObject var pluginHost: PluginHost
+
+    var body: some View {
+        switch pluginHost.selectedFeatureSettingsPane {
+        case .installed:
+            InstalledFeaturesSettingsView(pluginHost: pluginHost)
+        case .marketplace:
+            PluginManagementSettingsView(pluginHost: pluginHost)
+        case let .configuration(pluginID):
+            PluginConfigurationDetailPane(
+                pluginHost: pluginHost,
+                item: configurationItem(for: pluginID)
+            )
+        }
+    }
+
+    private func configurationItem(for pluginID: String) -> PluginConfigurationItem? {
+        pluginHost.pluginConfigurationItems.first { $0.id == pluginID }
+    }
+}
+
+private struct InstalledFeaturesSettingsView: View {
+    @ObservedObject var pluginHost: PluginHost
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                SettingsPageHeader(
+                    title: "已安装",
+                    description: "启用、隐藏并拖拽调整插件在菜单栏里的显示顺序。",
+                    systemImage: "checkmark.circle",
+                    iconTint: .green
+                )
+
+                SettingsCardContainer {
+                    if pluginHost.featureManagementItems.isEmpty {
+                        ContentUnavailableView(
+                            "暂无已安装插件",
+                            systemImage: "checkmark.circle",
+                            description: Text("安装插件后，会显示在这里。")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        FeatureManagementTableView(
+                            items: pluginHost.featureManagementItems,
+                            onVisibilityChange: { pluginID, isVisible in
+                                pluginHost.setFeatureVisibility(isVisible, for: pluginID)
+                            },
+                            onMove: { pluginID, targetOffset in
+                                pluginHost.moveFeatureManagementItem(id: pluginID, toOffset: targetOffset)
+                            }
+                        )
+                        .frame(height: featureManagementListHeight)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(SettingsStyle.contentBackground)
+    }
+
+    private var featureManagementListHeight: CGFloat {
+        FeatureManagementTableView.preferredHeight(for: pluginHost.featureManagementItems.count)
+    }
+}
+
+private struct SettingsCardContainer<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(SettingsStyle.cardBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
+            )
     }
 }
 
@@ -314,7 +429,7 @@ private struct PluginConfigurationDetailPane: View {
                 .background(SettingsStyle.contentBackground)
             } else {
                 ContentUnavailableView(
-                    "暂无可配置功能",
+                    "暂无可配置插件",
                     systemImage: "slider.horizontal.3",
                     description: Text("当插件提供权限、快捷键或自定义设置后，会显示在这里。")
                 )
@@ -329,22 +444,39 @@ private struct PluginConfigurationHeader: View {
     let item: PluginConfigurationItem
 
     var body: some View {
+        SettingsPageHeader(
+            title: item.title,
+            description: item.description,
+            systemImage: item.iconName,
+            iconTint: item.iconTint
+        )
+        .padding(.bottom, 2)
+    }
+}
+
+private struct SettingsPageHeader: View {
+    let title: String
+    let description: String
+    let systemImage: String
+    let iconTint: Color
+
+    var body: some View {
         HStack(alignment: .center, spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(item.iconTint.opacity(0.14))
+                    .fill(iconTint.opacity(0.14))
 
-                Image(systemName: item.iconName)
+                Image(systemName: systemImage)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(item.iconTint)
+                    .foregroundStyle(iconTint)
             }
             .frame(width: 42, height: 42)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
+                Text(title)
                     .font(.system(size: 20, weight: .semibold))
 
-                Text(item.description)
+                Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -352,7 +484,6 @@ private struct PluginConfigurationHeader: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.bottom, 2)
     }
 }
 
@@ -496,16 +627,9 @@ private struct PluginConfigurationSection<Content: View>: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            content
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(SettingsStyle.cardBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
-                )
+            SettingsCardContainer {
+                content
+            }
         }
     }
 }

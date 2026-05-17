@@ -1,4 +1,5 @@
 import Carbon
+import MacToolsPluginKit
 
 @MainActor
 final class GlobalShortcutManager {

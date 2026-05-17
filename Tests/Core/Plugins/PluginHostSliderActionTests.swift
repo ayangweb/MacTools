@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 @MainActor

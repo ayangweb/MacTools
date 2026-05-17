@@ -4,28 +4,9 @@ import OSLog
 enum AppLog {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "com.example.mactools"
 
-    static let appearancePlugin = Logger(subsystem: subsystem, category: "AppearancePlugin")
-    static let keepAwakePlugin = Logger(subsystem: subsystem, category: "KeepAwakePlugin")
-    static let middleClickPlugin = Logger(subsystem: subsystem, category: "MiddleClickPlugin")
-    static let middleClickSession = Logger(subsystem: subsystem, category: "MiddleClickSession")
-    static let keepAwakeSession = Logger(subsystem: subsystem, category: "KeepAwakeSession")
-    static let physicalCleanModePlugin = Logger(subsystem: subsystem, category: "PhysicalCleanModePlugin")
-    static let physicalCleanModeSession = Logger(subsystem: subsystem, category: "PhysicalCleanModeSession")
-    static let displayResolutionPlugin = Logger(subsystem: subsystem, category: "DisplayResolutionPlugin")
-    static let displayResolutionController = Logger(subsystem: subsystem, category: "DisplayResolutionController")
     static let accessibilityPermissionObserver = Logger(subsystem: subsystem, category: "AccessibilityPermissionObserver")
     static let displayConfigurationObserver = Logger(subsystem: subsystem, category: "DisplayConfigurationObserver")
-    static let displayBrightnessPlugin = Logger(subsystem: subsystem, category: "DisplayBrightnessPlugin")
-    static let displayBrightnessController = Logger(subsystem: subsystem, category: "DisplayBrightnessController")
-    static let displayBrightnessBackend = Logger(subsystem: subsystem, category: "DisplayBrightnessBackend")
-    static let displayTrueColorPlugin = Logger(subsystem: subsystem, category: "DisplayTrueColorPlugin")
-    static let hideNotchController = Logger(subsystem: subsystem, category: "HideNotchController")
-    static let hideNotchWallpaperManager = Logger(subsystem: subsystem, category: "HideNotchWallpaperManager")
-    static let hideNotchOverlayManager = Logger(subsystem: subsystem, category: "HideNotchOverlayManager")
     static let hideDockPlugin = Logger(subsystem: subsystem, category: "HideDockPlugin")
-    static let ejectDiskPlugin = Logger(subsystem: subsystem, category: "EjectDiskPlugin")
-    static let emptyTrashPlugin = Logger(subsystem: subsystem, category: "EmptyTrashPlugin")
-    static let nightShiftPlugin = Logger(subsystem: subsystem, category: "NightShiftPlugin")
 
     static var isVerboseLoggingEnabled: Bool {
         #if DEBUG

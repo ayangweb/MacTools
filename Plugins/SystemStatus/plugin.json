@@ -1,0 +1,20 @@
+{
+  "id": "system-status",
+  "displayName": "系统状态",
+  "summary": "实时查看系统状态",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "SystemStatus.bundle",
+  "factoryClass": "SystemStatusPlugin.SystemStatusPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "SystemStatusPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": true,
+    "configuration": false
+  },
+  "permissions": []
+}

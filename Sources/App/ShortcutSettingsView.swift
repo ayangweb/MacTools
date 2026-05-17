@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 private enum ShortcutSettingsLayout {
     static let controlColumnWidth: CGFloat = 128

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 enum MenuBarPanelLayout {
     static let baseWidth: CGFloat = 288
@@ -13,6 +14,7 @@ enum MenuBarPanelLayout {
     static let rowVerticalPadding: CGFloat = 16
     static let detailSpacing: CGFloat = 8
     static let detailControlSpacing: CGFloat = 8
+    static let emptyContentHeight: CGFloat = 150
     static let settingsRowHeight: CGFloat = 36
     static let actionRowVerticalPadding: CGFloat = 8
     static let selectRowVerticalPadding: CGFloat = 5
@@ -36,17 +38,19 @@ enum MenuBarPanelLayout {
     }
 
     static func height(for panelItems: [PluginPanelItem]) -> CGFloat {
-        let featureRowsHeight = panelItems.reduce(CGFloat(0)) { partialResult, item in
+        let rowContentHeight = panelItems.reduce(CGFloat(0)) { partialResult, item in
             partialResult + rowHeight(for: item)
         }
         let featureSpacing = CGFloat(max(panelItems.count - 1, 0)) * featureRowSpacing
+        let featureContentHeight = panelItems.isEmpty
+            ? emptyContentHeight
+            : rowContentHeight + featureSpacing
         let dividerHeight: CGFloat = 1
         let settingsRowsHeight: CGFloat = settingsRowHeight * 2
         let rootSpacing = rootSpacing * 2
         let verticalPadding = outerPadding * 2
 
-        return featureRowsHeight
-            + featureSpacing
+        return featureContentHeight
             + dividerHeight
             + settingsRowsHeight
             + rootSpacing
@@ -307,9 +311,9 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
 struct MenuBarContent: View {
     static let diskCleanWindowID = "disk-clean"
-    static let diskCleanOpenDetailsActionID = DiskCleanPlugin.ControlID.openDetails
+    static let diskCleanOpenDetailsActionID = "disk-clean-open-details"
     static let launchControlWindowID = "launch-control"
-    static let launchControlOpenManagerActionID = LaunchControlPlugin.ControlID.openManager
+    static let launchControlOpenManagerActionID = "launch-control-open-manager"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -558,61 +562,76 @@ struct MenuBarContent: View {
 
     private var featureCards: some View {
         VStack(spacing: MenuBarPanelLayout.featureRowSpacing) {
-            ForEach(pluginHost.panelItems) { item in
-                FeatureRowView(
-                    item: item,
-                    isOn: Binding(
-                        get: { pluginHost.isSwitchOn(for: item.id) },
-                        set: { newValue in
-                            handlePanelSwitchChange(newValue, for: item)
-                        }
-                    ),
-                    onDisclosureToggle: { isExpanded in
-                        pluginHost.setDisclosureExpanded(isExpanded, for: item.id)
+            if pluginHost.panelItems.isEmpty {
+                PanelPluginEmptyState(
+                    title: "暂无插件",
+                    systemImage: "shippingbox",
+                    iconTint: .blue,
+                    onInstall: {
+                        pluginHost.presentPluginMarketplace()
                     },
-                    onSelectionChange: { controlID, optionID in
-                        pluginHost.setPanelSelectionValue(optionID, controlID: controlID, for: item.id)
-                    },
-                    onNavigationSelectionChange: { controlID, optionID in
-                        pluginHost.setPanelNavigationSelectionValue(optionID, controlID: controlID, for: item.id)
-                    },
-                    onNavigationHoverChange: { controlID, optionID, isHovering in
-                        handleNavigationHoverChange(
-                            pluginID: item.id,
-                            controlID: controlID,
-                            optionID: optionID,
-                            isHovering: isHovering
-                        )
-                    },
-                    onNavigationRowFrameChange: { controlID, optionID, frame in
-                        hoverCoordinator.updateRowFrame(
-                            frame,
-                            for: HoverSecondaryPanelCoordinator.Activation(
-                                pluginID: item.id,
-                                controlID: controlID,
-                                optionID: optionID
-                            )
-                        )
-                    },
-                    onDateChange: { controlID, date in
-                        pluginHost.setPanelDateValue(date, controlID: controlID, for: item.id)
-                    },
-                    onSliderChange: { controlID, value, phase in
-                        pluginHost.setPanelSliderValue(
-                            value,
-                            controlID: controlID,
-                            for: item.id,
-                            phase: phase
-                        )
-                    },
-                    onActionInvoke: { controlID, behavior in
-                        handleActionInvoke(
-                            controlID: controlID,
-                            for: item,
-                            behavior: behavior
-                        )
+                    onEnable: {
+                        pluginHost.presentInstalledPlugins()
                     }
                 )
+                .frame(minHeight: MenuBarPanelLayout.emptyContentHeight)
+            } else {
+                ForEach(pluginHost.panelItems) { item in
+                    FeatureRowView(
+                        item: item,
+                        isOn: Binding(
+                            get: { pluginHost.isSwitchOn(for: item.id) },
+                            set: { newValue in
+                                handlePanelSwitchChange(newValue, for: item)
+                            }
+                        ),
+                        onDisclosureToggle: { isExpanded in
+                            pluginHost.setDisclosureExpanded(isExpanded, for: item.id)
+                        },
+                        onSelectionChange: { controlID, optionID in
+                            pluginHost.setPanelSelectionValue(optionID, controlID: controlID, for: item.id)
+                        },
+                        onNavigationSelectionChange: { controlID, optionID in
+                            pluginHost.setPanelNavigationSelectionValue(optionID, controlID: controlID, for: item.id)
+                        },
+                        onNavigationHoverChange: { controlID, optionID, isHovering in
+                            handleNavigationHoverChange(
+                                pluginID: item.id,
+                                controlID: controlID,
+                                optionID: optionID,
+                                isHovering: isHovering
+                            )
+                        },
+                        onNavigationRowFrameChange: { controlID, optionID, frame in
+                            hoverCoordinator.updateRowFrame(
+                                frame,
+                                for: HoverSecondaryPanelCoordinator.Activation(
+                                    pluginID: item.id,
+                                    controlID: controlID,
+                                    optionID: optionID
+                                )
+                            )
+                        },
+                        onDateChange: { controlID, date in
+                            pluginHost.setPanelDateValue(date, controlID: controlID, for: item.id)
+                        },
+                        onSliderChange: { controlID, value, phase in
+                            pluginHost.setPanelSliderValue(
+                                value,
+                                controlID: controlID,
+                                for: item.id,
+                                phase: phase
+                            )
+                        },
+                        onActionInvoke: { controlID, behavior in
+                            handleActionInvoke(
+                                controlID: controlID,
+                                for: item,
+                                behavior: behavior
+                            )
+                        }
+                    )
+                }
             }
         }
         .frame(width: MenuBarPanelLayout.surfaceWidth, alignment: .leading)
