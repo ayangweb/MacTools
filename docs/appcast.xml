@@ -5,23 +5,19 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 0.15.2</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v0.15.2</link>
-            <sparkle:version>29</sparkle:version>
-            <sparkle:shortVersionString>0.15.2</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v0.15.2 -->
-
-## What's Changed
-### Other Changes
-* feat: add empty trash plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/44
-* fix: update blue light status logic in NightShiftPlugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/45
+            <title>Version 1.0.0</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.0</link>
+            <sparkle:version>30</sparkle:version>
+            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.0 -->
 
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v0.15.1...v0.15.2
+
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v0.15.2...v1.0.0
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Sat, 16 May 2026 12:45:57 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v0.15.2/MacTools.dmg" length="7492637" type="application/octet-stream" sparkle:edSignature="I0O4zjkEXczEBxaE4+taA5UDJnVTkLk4oPdbCeQrMh/aaoeFH36ImcerGOJ61fr2ttSGr4Ewzwjq/RORUx96Bw==" />
+            <pubDate>Sun, 17 May 2026 17:09:50 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.0/MacTools.dmg" length="6335983" type="application/octet-stream" sparkle:edSignature="u1rUIozJawPiz0Iew20sjEDqWEU9TPNdEf8JhqbsvZgp1XT4yaGNKUWWumgBmyMTcJ7yFPUwtv219ach/wkyAA==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
