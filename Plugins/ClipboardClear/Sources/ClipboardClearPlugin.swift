@@ -20,7 +20,7 @@ private struct ClipboardClearPluginProvider: PluginProvider {
 /// 剪贴板清空插件
 @MainActor
 final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    static let pluginID = "ClipboardClear"
+    static let pluginID = "clipboard-clear"
     static let pluginOrder: Int = 120
 
     private let pasteboard = NSPasteboard.general
@@ -99,6 +99,5 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
         return items.contains { !$0.types.isEmpty }
     }
 }
-
 
 

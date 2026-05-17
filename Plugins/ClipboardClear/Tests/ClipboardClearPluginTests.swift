@@ -5,6 +5,13 @@ import AppKit
 
 final class ClipboardClearPluginTests: XCTestCase {
     @MainActor
+    func testMetadataUsesStableKebabCaseIdentifier() {
+        let plugin = ClipboardClearPlugin()
+
+        XCTAssertEqual(plugin.metadata.id, "clipboard-clear")
+    }
+
+    @MainActor
     func testPanelStateIsDisabledWhenClipboardIsEmpty() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

@@ -35,6 +35,7 @@ final class DynamicPluginLoader: DynamicPluginLoading {
                 let provider = try loadProvider(for: record)
                 let context = packageStore.runtimeContext(for: record)
                 let plugins = provider.makePlugins()
+                try Self.validateLoadedPlugins(plugins, for: record)
 
                 for plugin in plugins {
                     plugin.activate(context: context)
@@ -75,12 +76,37 @@ final class DynamicPluginLoader: DynamicPluginLoading {
 
         return try factoryClass.makeProvider(context: context)
     }
+
+    static func validateLoadedPlugins(
+        _ plugins: [any MacToolsPlugin],
+        for record: PluginPackageRecord
+    ) throws {
+        guard plugins.count == 1 else {
+            throw DynamicPluginLoaderError.invalidPluginCount(
+                expected: record.manifest.id,
+                actual: plugins.count
+            )
+        }
+
+        guard let plugin = plugins.first else {
+            return
+        }
+
+        guard plugin.metadata.id == record.manifest.id else {
+            throw DynamicPluginLoaderError.pluginIdentifierMismatch(
+                expected: record.manifest.id,
+                actual: plugin.metadata.id
+            )
+        }
+    }
 }
 
-enum DynamicPluginLoaderError: LocalizedError {
+enum DynamicPluginLoaderError: LocalizedError, Equatable {
     case unreadableBundle(URL)
     case loadFailed(URL)
     case missingFactory(String)
+    case invalidPluginCount(expected: String, actual: Int)
+    case pluginIdentifierMismatch(expected: String, actual: String)
 
     var errorDescription: String? {
         switch self {
@@ -90,6 +116,10 @@ enum DynamicPluginLoaderError: LocalizedError {
             return "插件代码加载失败：\(url.path)"
         case let .missingFactory(name):
             return "插件缺少入口工厂：\(name)"
+        case let .invalidPluginCount(expected, actual):
+            return "插件包 \(expected) 必须返回 1 个插件，实际返回 \(actual) 个。"
+        case let .pluginIdentifierMismatch(expected, actual):
+            return "插件 ID 不匹配，manifest 为 \(expected)，运行时代码为 \(actual)。"
         }
     }
 }

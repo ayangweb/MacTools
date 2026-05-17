@@ -1,5 +1,5 @@
 {
-  "id": "ClipboardClear",
+  "id": "clipboard-clear",
   "displayName": "清空剪贴板",
   "summary": "一键清空当前剪贴板内容",
   "version": "1.0.0",
