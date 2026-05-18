@@ -26,6 +26,7 @@ struct PluginManagementSettingsView: View {
                             PluginManagementRow(
                                 item: item,
                                 isBusy: activeOperationID == item.id,
+                                isInteractionDisabled: activeOperationID != nil,
                                 onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
                                 onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
                                 onUninstall: { uninstall(item) },
@@ -86,6 +87,23 @@ struct PluginManagementSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            if hasAvailablePluginUpdates {
+                Button {
+                    runOperation(id: "catalog.updateAll") {
+                        try await pluginHost.updateAvailablePluginsFromCatalog()
+                    }
+                } label: {
+                    PluginManagementActionLabel(
+                        title: "全部更新",
+                        busyTitle: "更新中",
+                        isBusy: activeOperationID == "catalog.updateAll",
+                        width: 74
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(activeOperationID != nil || pluginHost.pluginCatalogStatus.isRefreshing)
+            }
+
             Button {
                 runOperation(id: "catalog.refresh") {
                     await pluginHost.refreshPluginCatalog()
@@ -98,7 +116,15 @@ struct PluginManagementSettingsView: View {
         }
     }
 
+    private var hasAvailablePluginUpdates: Bool {
+        pluginHost.pluginManagementItems.contains { $0.canUpdate }
+    }
+
     private func runOperation(id: String, _ operation: @escaping () async throws -> Void) {
+        guard activeOperationID == nil else {
+            return
+        }
+
         activeOperationID = id
 
         Task {
@@ -113,6 +139,10 @@ struct PluginManagementSettingsView: View {
     }
 
     private func uninstall(_ item: PluginManagementItem) {
+        guard activeOperationID == nil else {
+            return
+        }
+
         do {
             try pluginHost.uninstallDynamicPlugin(pluginID: item.id)
         } catch {
@@ -124,6 +154,7 @@ struct PluginManagementSettingsView: View {
 private struct PluginManagementRow: View {
     let item: PluginManagementItem
     let isBusy: Bool
+    let isInteractionDisabled: Bool
     let onInstall: () -> Void
     let onUpdate: () -> Void
     let onUninstall: () -> Void
@@ -181,7 +212,7 @@ private struct PluginManagementRow: View {
                 Button("立即重启", action: onRelaunch)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .buttonStyle(.link)
-                    .disabled(isBusy)
+                    .disabled(isInteractionDisabled)
             }
         }
     }
@@ -198,7 +229,7 @@ private struct PluginManagementRow: View {
                 )
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isBusy)
+            .disabled(isInteractionDisabled)
         }
 
         if item.canUpdate {
@@ -211,7 +242,7 @@ private struct PluginManagementRow: View {
                 )
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isBusy)
+            .disabled(isInteractionDisabled)
         }
 
         if item.canUninstall {
@@ -220,7 +251,7 @@ private struct PluginManagementRow: View {
                     .frame(width: actionButtonLabelWidth)
             }
             .buttonStyle(.bordered)
-            .disabled(isBusy)
+            .disabled(isInteractionDisabled)
         }
     }
 

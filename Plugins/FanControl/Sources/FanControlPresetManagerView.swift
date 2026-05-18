@@ -29,7 +29,7 @@ struct FanControlPresetManagerView: View {
                     }
                 }
             }
-            .pluginSettingsCardBackground(.plugin)
+            .pluginSettingsCardBackground(.host)
         }
     }
 
@@ -65,7 +65,7 @@ struct FanControlPresetManagerView: View {
                         }
                     }
                 }
-                .pluginSettingsCardBackground(.plugin)
+                .pluginSettingsCardBackground(.host)
             }
         }
     }
@@ -84,7 +84,7 @@ struct FanControlPresetManagerView: View {
             .padding(.vertical, 24)
             Spacer()
         }
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.host)
     }
 
     // MARK: - Helpers

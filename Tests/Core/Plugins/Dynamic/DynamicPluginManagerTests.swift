@@ -98,6 +98,66 @@ final class DynamicPluginManagerTests: XCTestCase {
         )
     }
 
+    func testBatchUpdatingLoadedPluginsReloadsOnlyOnce() throws {
+        let firstAlphaURL = try makePackage(id: "com.example.alpha", version: "1.0.0", displayName: "Alpha")
+        let firstBetaURL = try makePackage(id: "com.example.beta", version: "1.0.0", displayName: "Beta")
+        let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0", displayName: "Alpha")
+        let updateBetaURL = try makePackage(id: "com.example.beta", version: "2.0.0", displayName: "Beta")
+        let store = makeStore()
+        _ = try store.installPackage(from: firstAlphaURL)
+        _ = try store.installPackage(from: firstBetaURL)
+        let alphaPlugin = MockDynamicPlugin(id: "com.example.alpha")
+        let betaPlugin = MockDynamicPlugin(id: "com.example.beta")
+        let pluginsByID = [
+            "com.example.alpha": alphaPlugin,
+            "com.example.beta": betaPlugin,
+        ]
+        let loader = StubDynamicPluginLoader { records in
+            records.compactMap { record in
+                guard let plugin = pluginsByID[record.id] else {
+                    return nil
+                }
+
+                return DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
+            }
+        }
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+        var pluginChangeBatches: [[String]] = []
+        manager.onPluginsChanged = { plugins in
+            pluginChangeBatches.append(plugins.map(\.metadata.id))
+        }
+
+        XCTAssertEqual(manager.loadInstalledPlugins().map(\.metadata.id), ["com.example.alpha", "com.example.beta"])
+
+        let failures = manager.updatePluginPackages([
+            (sourceURL: updateAlphaURL, catalogEntry: makeCatalogEntry(id: "com.example.alpha", version: "2.0.0")),
+            (sourceURL: updateBetaURL, catalogEntry: makeCatalogEntry(id: "com.example.beta", version: "2.0.0")),
+        ])
+
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertEqual(loader.receivedRecordIDBatches, [
+            ["com.example.alpha", "com.example.beta"],
+            [],
+        ])
+        XCTAssertEqual(pluginChangeBatches, [[]])
+        XCTAssertEqual(alphaPlugin.deactivationReasons, [.updating])
+        XCTAssertEqual(betaPlugin.deactivationReasons, [.updating])
+        XCTAssertEqual(
+            store.installedRecords().map { "\($0.id):\($0.manifest.version)" },
+            [
+                "com.example.alpha:2.0.0",
+                "com.example.beta:2.0.0",
+            ]
+        )
+        XCTAssertTrue(manager.pluginManagementItems.allSatisfy { item in
+            if case .restartRequired = item.state {
+                return true
+            }
+
+            return false
+        })
+    }
+
     func testUninstallingLoadedPluginDeletesPackageAndRemovesManagementItem() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
@@ -174,6 +234,7 @@ final class DynamicPluginManagerTests: XCTestCase {
     private func makePackage(
         id: String,
         version: String = "1.0.0",
+        displayName: String = "Demo",
         bundleRelativePath: String = "Demo.bundle"
     ) throws -> URL {
         let packageURL = temporaryRoot
@@ -186,7 +247,7 @@ final class DynamicPluginManagerTests: XCTestCase {
 
         let manifest = PluginPackageManifest(
             id: id,
-            displayName: "Demo",
+            displayName: displayName,
             version: version,
             minHostVersion: "0.1.0",
             bundleRelativePath: bundleRelativePath

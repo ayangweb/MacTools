@@ -100,6 +100,11 @@ struct PluginManagementItem: Identifiable, Equatable {
     }
 }
 
+struct PluginPackageUpdateFailure {
+    let pluginID: String
+    let error: Error
+}
+
 @MainActor
 final class DynamicPluginManager: ObservableObject {
     private let packageStore: PluginPackageStore
@@ -194,6 +199,50 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func updatePluginPackage(from sourceURL: URL, catalogEntry: PluginCatalogEntry? = nil) throws {
+        try updatePluginPackageWithoutReload(from: sourceURL, catalogEntry: catalogEntry)
+        reloadInstalledPlugins()
+    }
+
+    func updatePluginPackages(
+        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)]
+    ) -> [PluginPackageUpdateFailure] {
+        guard !updates.isEmpty else {
+            return []
+        }
+
+        var failures: [PluginPackageUpdateFailure] = []
+        var didUpdatePackage = false
+
+        defer {
+            if didUpdatePackage {
+                reloadInstalledPlugins()
+            }
+        }
+
+        for update in updates {
+            do {
+                try updatePluginPackageWithoutReload(
+                    from: update.sourceURL,
+                    catalogEntry: update.catalogEntry
+                )
+                didUpdatePackage = true
+            } catch {
+                failures.append(
+                    PluginPackageUpdateFailure(
+                        pluginID: update.catalogEntry.id,
+                        error: error
+                    )
+                )
+            }
+        }
+
+        return failures
+    }
+
+    private func updatePluginPackageWithoutReload(
+        from sourceURL: URL,
+        catalogEntry: PluginCatalogEntry? = nil
+    ) throws {
         try validatePackage(sourceURL, matches: catalogEntry)
         let manifest = try PluginPackageManifestLoader.load(
             from: sourceURL,
@@ -210,8 +259,6 @@ final class DynamicPluginManager: ObservableObject {
         } else {
             deferredPluginIDs.remove(manifest.id)
         }
-
-        reloadInstalledPlugins()
     }
 
     func isInstalledPlugin(_ pluginID: String) -> Bool {

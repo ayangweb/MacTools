@@ -48,6 +48,15 @@ struct PluginCatalogStatus: Equatable {
     }
 }
 
+struct PluginCatalogBulkUpdateError: LocalizedError {
+    let failures: [PluginPackageUpdateFailure]
+
+    var errorDescription: String? {
+        let ids = failures.map(\.pluginID).joined(separator: "、")
+        return "部分插件更新失败：\(ids)"
+    }
+}
+
 @MainActor
 final class PluginCatalogManager {
     private let catalogProvider: (any PluginCatalogProviding)?
@@ -144,6 +153,31 @@ final class PluginCatalogManager {
         try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
     }
 
+    func updateAvailablePlugins() async throws {
+        let entries = try availableUpdateEntries()
+        guard !entries.isEmpty else {
+            return
+        }
+
+        var resolvedUpdates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)] = []
+        var failures: [PluginPackageUpdateFailure] = []
+
+        for entry in entries {
+            do {
+                let packageURL = try await packageResolver.resolvePackage(for: entry)
+                resolvedUpdates.append((sourceURL: packageURL, catalogEntry: entry))
+            } catch {
+                failures.append(PluginPackageUpdateFailure(pluginID: entry.id, error: error))
+            }
+        }
+
+        failures.append(contentsOf: dynamicPluginManager.updatePluginPackages(resolvedUpdates))
+
+        guard failures.isEmpty else {
+            throw PluginCatalogBulkUpdateError(failures: failures)
+        }
+    }
+
     func rebuildManagementItems() {
         dynamicPluginManager.rebuildManagementItems(catalogSnapshot: snapshot)
     }
@@ -154,6 +188,27 @@ final class PluginCatalogManager {
         }
 
         return entry
+    }
+
+    private func availableUpdateEntries() throws -> [PluginCatalogEntry] {
+        let ids = dynamicPluginManager.pluginManagementItems
+            .filter(\.canUpdate)
+            .map(\.id)
+        guard !ids.isEmpty else {
+            return []
+        }
+
+        let entriesByID = Dictionary(
+            uniqueKeysWithValues: (snapshot?.catalog.plugins ?? []).map { ($0.id, $0) }
+        )
+
+        return try ids.map { id in
+            guard let entry = entriesByID[id] else {
+                throw PluginCatalogManagerError.catalogEntryNotFound(id)
+            }
+
+            return entry
+        }
     }
 
     private func statusSource(for snapshot: PluginCatalogSnapshot) -> PluginCatalogStatus.Source {

@@ -604,6 +604,18 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
     }
 
+    func updateAvailablePluginsFromCatalog() async throws {
+        guard let pluginCatalogManager else {
+            return
+        }
+
+        defer {
+            syncPluginManagementState()
+        }
+
+        try await pluginCatalogManager.updateAvailablePlugins()
+    }
+
     func installPluginPackage(from sourceURL: URL) throws {
         try dynamicPluginManager?.installPluginPackage(from: sourceURL)
         pluginCatalogManager?.rebuildManagementItems()

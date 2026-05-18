@@ -4,7 +4,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
 
 - Production reads `catalog.json` from GitHub Pages and downloads plugin packages from GitHub Releases.
 - Local development reads a Debug-only `file://` catalog, usually configured with `MACTOOLS_PLUGIN_CATALOG_URL`.
-- Both flows resolve a catalog entry into a local staged package, verify checksum and manifest compatibility, then install through the same package store.
+- Both flows resolve catalog entries into local staged packages, verify checksum and manifest compatibility, then install through the same package store. The marketplace can update one plugin at a time or run a batch update for every currently updateable plugin.
 
 ## Catalog v1
 
@@ -220,6 +220,7 @@ Install, update, enable, disable, and uninstall are immediate at the UI contribu
 - Installed and enabled plugins contribute panels, components, settings, permissions, and shortcuts.
 - Disabled plugins are removed from UI and function lists immediately.
 - Uninstalled plugins are removed from UI immediately and package files are deleted.
+- Batch updates resolve the currently updateable catalog entries and rebuild plugin management state once after successful package replacements.
 - Already-loaded native code is not force-unloaded in-process. The executable code is fully released after the app restarts.
 
 This keeps the native bundle lifecycle aligned with macOS loadable bundle constraints while preserving a predictable management UI.
