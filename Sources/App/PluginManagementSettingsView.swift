@@ -2,6 +2,8 @@ import SwiftUI
 
 struct PluginManagementSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    var appRelauncher: any AppRelaunching = AppRelauncher()
+
     @State private var alertMessage: String?
     @State private var activeOperationID: String?
 
@@ -25,7 +27,8 @@ struct PluginManagementSettingsView: View {
                                 isBusy: activeOperationID == item.id,
                                 onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
                                 onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
-                                onUninstall: { uninstall(item) }
+                                onUninstall: { uninstall(item) },
+                                onRelaunch: { appRelauncher.relaunch() }
                             )
                         }
                     }
@@ -123,6 +126,7 @@ private struct PluginManagementRow: View {
     let onInstall: () -> Void
     let onUpdate: () -> Void
     let onUninstall: () -> Void
+    let onRelaunch: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -146,11 +150,7 @@ private struct PluginManagementRow: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text(item.detailText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                detail
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -173,6 +173,23 @@ private struct PluginManagementRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
         )
+    }
+
+    private var detail: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(item.detailText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+
+            if item.requiresRelaunchAction {
+                Button("立即重启", action: onRelaunch)
+                    .font(.footnote)
+                    .buttonStyle(.link)
+                    .disabled(isBusy)
+            }
+        }
     }
 
     @ViewBuilder
@@ -258,6 +275,16 @@ private struct PluginManagementRow: View {
         case .failed, .incompatible, .revoked:
             return "exclamationmark.triangle.fill"
         }
+    }
+}
+
+private extension PluginManagementItem {
+    var requiresRelaunchAction: Bool {
+        if case .restartRequired = state {
+            return true
+        }
+
+        return false
     }
 }
 

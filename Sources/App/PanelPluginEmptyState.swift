@@ -31,7 +31,7 @@ struct PanelPluginEmptyState: View {
     }
 
     private var actionLinks: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
             Button("安装", action: onInstall)
                 .buttonStyle(.link)
                 .help("打开插件市场")
