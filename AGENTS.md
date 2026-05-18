@@ -58,7 +58,7 @@
 - 自定义插件设置视图的字体层级以 `FanControlPresetManagerView` 为视觉基准，并通过 `PluginSettingsTheme.Typography` 表达：页面标题用 `pageTitle`，页面说明用 `pageDescription`；分组标题使用 `Label` + SF Symbol + `sectionTitle` + `.foregroundStyle(.secondary)`；普通行标题使用 `rowTitle`，强调行标题或表头使用 `emphasizedRowTitle`；说明、帮助、副标题使用 `rowDescription`；状态徽标使用 `statusBadge`；固定宽度数值读数使用 `monospacedValue`。这些 token 应优先映射 Apple 平台语义字体（如 `.title2`、`.body`、`.subheadline`），避免在插件里散落裸字号。
 - 宿主设置页页面头使用 `PluginSettingsTheme.Typography.pageTitle` + `pageDescription`；插件自定义配置内容从分组开始，不再使用页面级标题，避免同一页出现多个视觉主标题。
 - 自定义配置的排版以风扇控制为基准，并优先使用 `PluginSettingsTheme.Spacing`：外层分组间距用 `section`，分组标题与内容间距用 `sectionHeaderContent`；卡片/列表行横向 padding 用 `rowHorizontal`，普通行纵向 padding 用 `rowVertical`，包含编辑控件或滑杆的行用 `interactiveRowVertical`；行内主副标题间距用 `rowTitleDescription`，控件与文本间距用 `rowContentControl`。
-- 卡片和列表容器优先使用 `PluginSettingsTheme.Palette` 与 `Radius`/`Stroke`：宿主设置卡片用 `cardBackground`/`cardBorder`，插件自定义列表可用 macOS 原生 `nativeCardBackground`/`nativeSeparator`；圆角优先 `Radius.card`，宿主大卡片可用 `Radius.hostCard`。
+- 卡片和列表容器优先使用 `PluginSettingsTheme.Palette` 与 `Radius`：通过背景色、留白和圆角区分区域，不给普通设置卡片加描边；宿主设置卡片用 `cardBackground`，插件自定义列表可用 macOS 原生 `nativeCardBackground`，圆角优先 `Radius.card`，宿主大卡片可用 `Radius.hostCard`。
 - 控件布局要稳定：按钮使用系统 `.bordered`/`.borderedProminent` 与 `.controlSize(.small)`，开关使用 `.toggleStyle(.switch)`；滑杆、Picker、文本框等设置明确的最小/理想/最大宽度，数值文本给固定宽度，长标题和路径使用 `lineLimit`、`fixedSize` 或 text selection，避免窗口缩放时挤压或跳动。
 - 文案保持中文、短句、接近 macOS 原生表达。标题描述“对象/设置项”，副标题描述“作用/当前状态”，不要把操作说明写成大段说明文字。
 

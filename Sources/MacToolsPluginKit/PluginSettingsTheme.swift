@@ -175,10 +175,6 @@ public struct PluginSettingsCardBackground: ViewModifier {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(background)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(border, lineWidth: strokeWidth)
-            )
     }
 
     private var radius: CGFloat {
@@ -201,23 +197,6 @@ public struct PluginSettingsCardBackground: ViewModifier {
         }
     }
 
-    private var border: Color {
-        switch style {
-        case .host, .recessed:
-            return PluginSettingsTheme.Palette.cardBorder
-        case .plugin:
-            return PluginSettingsTheme.Palette.nativeSeparator
-        }
-    }
-
-    private var strokeWidth: CGFloat {
-        switch style {
-        case .host, .recessed:
-            return PluginSettingsTheme.Stroke.standard
-        case .plugin:
-            return PluginSettingsTheme.Stroke.hairline
-        }
-    }
 }
 
 public extension View {

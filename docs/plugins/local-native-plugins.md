@@ -90,7 +90,7 @@ Plugin settings are hosted by MacTools. Prefer the descriptive surfaces first:
 
 Custom configuration views must provide only the plugin-specific content. The settings window header, plugin icon, plugin description, permission cards, and shortcut cards are derived by the host; do not repeat a full page title inside the custom view.
 
-All custom settings views should use `MacToolsPluginKit.PluginSettingsTheme` for typography, spacing, radii, strokes, colors, and shared card backgrounds. This keeps the dependency direction clean: the host app and plugins both depend on `MacToolsPluginKit`, while plugins never depend on `Sources/App/SettingsStyle.swift`.
+All custom settings views should use `MacToolsPluginKit.PluginSettingsTheme` for typography, spacing, radii, colors, and shared card backgrounds. This keeps the dependency direction clean: the host app and plugins both depend on `MacToolsPluginKit`, while plugins never depend on `Sources/App/SettingsStyle.swift`.
 
 Recommended mapping:
 
@@ -100,6 +100,7 @@ Recommended mapping:
 - Fixed-width numeric or path-like values may use `monospacedValue` or a local monospaced font when the content requires it.
 - Layout: use `Spacing.section`, `sectionHeaderContent`, `cardContent`, `rowHorizontal`, `rowVertical`, `interactiveRowVertical`, and `rowContentControl`.
 - Containers: use `.pluginSettingsCardBackground(.host)` for host-style cards, `.pluginSettingsCardBackground(.plugin)` for native plugin lists, and `.pluginSettingsCardBackground(.recessed)` for inset fields/log panes.
+- Ordinary settings cards should be separated by background color, spacing, and rounded corners rather than borders. Reserve strokes for focused inputs, keycaps, badges, or other control-specific states.
 
 Avoid copying a plugin-local settings style enum. If a token is missing, add it to `PluginSettingsTheme` instead of hard-coding the same value in multiple plugins.
 
