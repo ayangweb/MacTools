@@ -258,7 +258,7 @@ struct ActivityBarComponentView: View {
     private func topAppRow(name: String, stats: ActivityBarAppStats, maxScreenTime: Double) -> some View {
         let isExpanded = expandedAppName == name
 
-        VStack(spacing: 3) {
+        return VStack(spacing: 3) {
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     expandedAppName = isExpanded ? nil : name
