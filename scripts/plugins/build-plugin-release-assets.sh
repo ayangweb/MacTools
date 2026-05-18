@@ -24,6 +24,7 @@ CATALOG_PRIVATE_KEY_BASE64="${PLUGIN_CATALOG_PRIVATE_KEY_BASE64:-}"
 SIGN_IDENTITY="${PLUGIN_CODE_SIGN_IDENTITY:-}"
 CONFIGURATION="Release"
 DESTINATION=""
+XCODEBUILD_COMMAND="${XCODEBUILD:-}"
 MINIMUM_HOST_VERSION=""
 RELEASE_NOTES_URL=""
 PLUGIN_FILTERS=()
@@ -72,6 +73,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --destination)
             DESTINATION="${2:-}"
+            shift 2
+            ;;
+        --xcodebuild)
+            XCODEBUILD_COMMAND="${2:-}"
             shift 2
             ;;
         --minimum-host-version)
@@ -143,6 +148,9 @@ build_args=(
 )
 if [[ -n "$DESTINATION" ]]; then
     build_args+=(--destination "$DESTINATION")
+fi
+if [[ -n "$XCODEBUILD_COMMAND" ]]; then
+    build_args+=(--xcodebuild "$XCODEBUILD_COMMAND")
 fi
 for plugin_filter in "${PLUGIN_FILTERS[@]}"; do
     build_args+=(--plugin "$plugin_filter")

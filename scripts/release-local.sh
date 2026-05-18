@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
 PROJECT_SPEC="$ROOT_DIR/project.yml"
 PROJECT_FILE="$ROOT_DIR/MacTools.xcodeproj"
+XCODEBUILD="${XCODEBUILD:-$SCRIPT_DIR/xcodebuild-filtered.sh}"
 APP_NAME="MacTools"
 APP_ENTITLEMENTS="$ROOT_DIR/Configs/MacTools.entitlements"
 SCHEME="MacTools"
@@ -412,13 +413,13 @@ function sign_disk_image() {
 
 function build_release_app() {
   require_command xcodegen
-  require_command xcodebuild
+  require_command "$XCODEBUILD"
 
   info "Generating Xcode project"
   (cd "$ROOT_DIR" && make generate >/dev/null)
 
   info "Building Release app version=$VERSION build=$BUILD_NUMBER"
-  xcodebuild \
+  "$XCODEBUILD" \
     -project "$PROJECT_FILE" \
     -scheme "$SCHEME" \
     -configuration Release \

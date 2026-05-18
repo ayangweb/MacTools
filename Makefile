@@ -11,6 +11,7 @@ APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(APP_PRODUCT_NAME).app
 APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
 HOST_ARCH := $(shell uname -m)
 BUILD_DESTINATION := platform=macOS,arch=$(HOST_ARCH)
+XCODEBUILD ?= $(abspath scripts/xcodebuild-filtered.sh)
 LOCAL_PLUGIN_SOURCE_DIR ?= Plugins
 PLUGIN_PROJECT_SOURCE_DIR ?= Plugins
 GENERATED_PLUGIN_PROJECT_CONFIG := Configs/GeneratedPlugins.yml
@@ -45,7 +46,7 @@ generate: generate-plugin-config
 	@xcodegen generate
 
 build: generate
-	@xcodebuild -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
+	@$(XCODEBUILD) -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
 
 build-plugin: generate
 	@if [ -n "$(PLUGIN)" ]; then \
@@ -57,6 +58,7 @@ build-plugin: generate
 		--source-dir "$(LOCAL_PLUGIN_SOURCE_DIR)" \
 		--output-dir "$(LOCAL_PLUGIN_BUILD_DIR)" \
 		--destination "$(BUILD_DESTINATION)" \
+		--xcodebuild "$(XCODEBUILD)" \
 		$${PLUGIN_ARGS[@]}
 
 build-plugins: build-plugin
@@ -72,6 +74,7 @@ package-plugins-release: generate
 		--signed-catalog-output "$(PLUGIN_RELEASE_SIGNED_CATALOG)" \
 		--sign-identity "$(PLUGIN_CODE_SIGN_IDENTITY)" \
 		--destination "$(BUILD_DESTINATION)" \
+		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
 run: build

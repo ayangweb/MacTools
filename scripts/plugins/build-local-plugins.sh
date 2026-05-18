@@ -16,6 +16,7 @@ Conventions:
     passed as a comma-separated list.
   - Set --sign-identity or PLUGIN_CODE_SIGN_IDENTITY to sign packaged bundles.
   - Set --unsigned-build when a later packaging step will sign the bundle.
+  - Set --xcodebuild or XCODEBUILD to override the xcodebuild executable.
 
 Generated output:
   build/LocalPlugins/
@@ -29,6 +30,7 @@ OUTPUT_DIR=""
 PLUGIN_FILTERS=()
 CONFIGURATION="${CONFIGURATION:-Debug}"
 DESTINATION="${DESTINATION:-}"
+XCODEBUILD_COMMAND="${XCODEBUILD:-}"
 SIGN_IDENTITY="${PLUGIN_CODE_SIGN_IDENTITY:-}"
 SKIP_CATALOG=0
 UNSIGNED_BUILD=0
@@ -58,6 +60,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --destination)
             DESTINATION="${2:-}"
+            shift 2
+            ;;
+        --xcodebuild)
+            XCODEBUILD_COMMAND="${2:-}"
             shift 2
             ;;
         --sign-identity)
@@ -96,6 +102,9 @@ if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+if [[ -z "$XCODEBUILD_COMMAND" ]]; then
+    XCODEBUILD_COMMAND="$REPO_ROOT/scripts/xcodebuild-filtered.sh"
+fi
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 PACKAGES_DIR="$OUTPUT_DIR/Packages"
 DERIVED_DATA_DIR="$OUTPUT_DIR/DerivedData"
@@ -222,12 +231,12 @@ scheme_for() {
 
     local root_name
     root_name="$(basename "$root")"
-    if xcodebuild -list -project "$project" 2>/dev/null | grep -q "^[[:space:]]*$root_name$"; then
+    if "$XCODEBUILD_COMMAND" -list -project "$project" 2>/dev/null | grep -q "^[[:space:]]*$root_name$"; then
         printf -v "$output_var" '%s' "$root_name"
         return
     fi
 
-    candidate_scheme="$(xcodebuild -list -json -project "$project" 2>/dev/null \
+    candidate_scheme="$("$XCODEBUILD_COMMAND" -list -json -project "$project" 2>/dev/null \
         | python3 -c 'import json,sys; data=json.load(sys.stdin); print((data.get("project") or {}).get("schemes", [""])[0])')"
     printf -v "$output_var" '%s' "$candidate_scheme"
 }
@@ -280,7 +289,7 @@ build_bundle_if_needed() {
     fi
     build_args+=(build -quiet)
 
-    if ! xcodebuild "${build_args[@]}"; then
+    if ! "$XCODEBUILD_COMMAND" "${build_args[@]}"; then
         echo "Failed to build plugin bundle '$scheme' for $root." >&2
         return 1
     fi
