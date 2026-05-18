@@ -22,7 +22,7 @@ final class FixDamagedAppPluginTests: XCTestCase {
     func testMetadataDefaultDescription() {
         let plugin = FixDamagedAppPlugin()
 
-        XCTAssertEqual(plugin.metadata.defaultDescription, "移除隔离属性，解决「已损坏」提示")
+        XCTAssertEqual(plugin.metadata.defaultDescription, "移除隔离属性，解决「已损坏」或「不受信任」提示")
     }
 
     // MARK: - Primary Panel Descriptor

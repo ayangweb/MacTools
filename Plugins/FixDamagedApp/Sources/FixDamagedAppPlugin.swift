@@ -35,7 +35,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
         iconName: "wrench.and.screwdriver.fill",
         iconTint: Color(nsColor: .systemOrange),
         order: 94,
-        defaultDescription: "移除隔离属性，解决「已损坏」提示"
+        defaultDescription: "移除隔离属性，解决「已损坏」或「不受信任」提示"
     )
 
     // MARK: State
