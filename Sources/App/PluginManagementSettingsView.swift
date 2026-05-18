@@ -154,10 +154,12 @@ private struct PluginManagementRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(item.statusText)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(statusColor)
-                .frame(width: 58, alignment: .trailing)
+            if let visibleStatusText {
+                Text(visibleStatusText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 58, alignment: .trailing)
+            }
 
             actionButtons
         }
@@ -180,7 +182,8 @@ private struct PluginManagementRow: View {
                 PluginManagementActionLabel(
                     title: "安装",
                     busyTitle: "安装中",
-                    isBusy: isBusy
+                    isBusy: isBusy,
+                    width: actionButtonLabelWidth
                 )
             }
             .buttonStyle(.borderedProminent)
@@ -192,7 +195,8 @@ private struct PluginManagementRow: View {
                 PluginManagementActionLabel(
                     title: "更新",
                     busyTitle: "更新中",
-                    isBusy: isBusy
+                    isBusy: isBusy,
+                    width: actionButtonLabelWidth
                 )
             }
             .buttonStyle(.borderedProminent)
@@ -200,10 +204,26 @@ private struct PluginManagementRow: View {
         }
 
         if item.canUninstall {
-            Button("卸载", role: .destructive, action: onUninstall)
-                .buttonStyle(.bordered)
-                .disabled(isBusy)
+            Button(role: .destructive, action: onUninstall) {
+                Text("卸载")
+                    .frame(width: actionButtonLabelWidth)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isBusy)
         }
+    }
+
+    private var visibleStatusText: String? {
+        switch item.state {
+        case .available, .enabled, .disabled:
+            return nil
+        case .localDevelopment, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
+            return item.statusText
+        }
+    }
+
+    private var actionButtonLabelWidth: CGFloat {
+        64
     }
 
     private var statusColor: Color {
@@ -245,6 +265,7 @@ private struct PluginManagementActionLabel: View {
     let title: String
     let busyTitle: String
     let isBusy: Bool
+    let width: CGFloat
 
     var body: some View {
         HStack(spacing: 6) {
@@ -256,6 +277,6 @@ private struct PluginManagementActionLabel: View {
 
             Text(isBusy ? busyTitle : title)
         }
-        .frame(minWidth: 52)
+        .frame(width: width)
     }
 }
