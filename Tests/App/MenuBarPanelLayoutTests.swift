@@ -116,6 +116,41 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
+    func testPreferredPanelHeightCapsTallFeatureListsAtSharedMaximum() {
+        let items = (0..<40).map { index in
+            makeItem(
+                id: "plugin-\(index)",
+                controlStyle: .switch,
+                isExpanded: false,
+                secondaryPanel: nil
+            )
+        }
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
+            MenuBarPanelLayout.maximumPanelHeight
+        )
+    }
+
+    func testPreferredPanelHeightRespectsVisibleScreenHeight() {
+        let items = (0..<40).map { index in
+            makeItem(
+                id: "plugin-\(index)",
+                controlStyle: .switch,
+                isExpanded: false,
+                secondaryPanel: nil
+            )
+        }
+
+        XCTAssertEqual(
+            min(
+                MenuBarPanelLayout.height(for: items),
+                MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 500)
+            ),
+            452
+        )
+    }
+
     func testEmptyContentSizeIncludesMarketplacePrompt() {
         XCTAssertEqual(
             MenuBarPanelLayout.contentSize(for: []),
@@ -124,13 +159,14 @@ final class MenuBarPanelLayoutTests: XCTestCase {
     }
 
     private func makeItem(
+        id: String = "display-resolution",
         controlStyle: PluginControlStyle,
         isExpanded: Bool,
         secondaryPanel: PluginPanelSecondaryPanel?,
         controls: [PluginPanelControl] = []
     ) -> PluginPanelItem {
         PluginPanelItem(
-            id: "display-resolution",
+            id: id,
             title: "显示器分辨率",
             iconName: "display",
             iconTint: Color(nsColor: .systemBlue),

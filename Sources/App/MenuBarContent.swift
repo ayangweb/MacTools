@@ -5,6 +5,9 @@ import MacToolsPluginKit
 enum MenuBarPanelLayout {
     static let baseWidth: CGFloat = 288
     static let secondaryPanelWidth: CGFloat = 216
+    static let maximumPanelHeight: CGFloat = 720
+    static let minimumPanelHeight: CGFloat = 220
+    static let screenVerticalMargin: CGFloat = 48
     static let cornerRadius: CGFloat = 12
     static let panelSpacing: CGFloat = 10
     static let outerPadding: CGFloat = 6
@@ -33,7 +36,7 @@ enum MenuBarPanelLayout {
     static func contentSize(for panelItems: [PluginPanelItem]) -> NSSize {
         NSSize(
             width: width(for: panelItems),
-            height: height(for: panelItems)
+            height: preferredPanelHeight(for: panelItems, screen: nil)
         )
     }
 
@@ -55,6 +58,23 @@ enum MenuBarPanelLayout {
             + settingsRowsHeight
             + rootSpacing
             + verticalPadding
+    }
+
+    static func preferredPanelHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
+        min(height(for: panelItems), maximumPanelHeight(for: screen))
+    }
+
+    static func maximumPanelHeight(for screen: NSScreen?) -> CGFloat {
+        maximumPanelHeight(visibleFrameHeight: screen?.visibleFrame.height)
+    }
+
+    static func maximumPanelHeight(visibleFrameHeight: CGFloat?) -> CGFloat {
+        guard let visibleFrameHeight else {
+            return maximumPanelHeight
+        }
+
+        let screenMaximum = visibleFrameHeight - screenVerticalMargin
+        return max(minimumPanelHeight, min(maximumPanelHeight, screenMaximum))
     }
 
     private static func rowHeight(for item: PluginPanelItem) -> CGFloat {
@@ -322,19 +342,19 @@ struct MenuBarContent: View {
     @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
 
     @ObservedObject var pluginHost: PluginHost
+    let panelHeight: CGFloat
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
     let onPresentDiskCleanConfiguration: () -> Void
     let onPresentLaunchControlConfiguration: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MenuBarPanelLayout.rootSpacing) {
-            featureCards
-            Divider()
-            settingsCard
-        }
-        .padding(MenuBarPanelLayout.outerPadding)
-        .frame(width: MenuBarPanelLayout.width(for: pluginHost.panelItems), alignment: .leading)
+        content
+        .frame(
+            width: MenuBarPanelLayout.width(for: pluginHost.panelItems),
+            height: panelHeight,
+            alignment: .topLeading
+        )
         .background(
             MenuWindowAccessor { window in
                 secondaryPanelController.setHostWindow(window)
@@ -376,6 +396,20 @@ struct MenuBarContent: View {
             secondaryPanelController.onHostWindowDismissRequest = nil
             secondaryPanelController.setHostWindow(nil)
         }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: MenuBarPanelLayout.rootSpacing) {
+            ScrollView(.vertical, showsIndicators: false) {
+                featureCards
+            }
+            .background(ScrollViewScrollerVisibilityConfigurator())
+
+            Divider()
+            settingsCard
+        }
+        .padding(MenuBarPanelLayout.outerPadding)
+        .frame(width: MenuBarPanelLayout.width(for: pluginHost.panelItems), alignment: .leading)
     }
 
     private func presentSettings() {
@@ -1672,6 +1706,57 @@ private struct NavigationRowFrameReader: NSViewRepresentable {
         let rectInWindow = view.convert(view.bounds, to: nil)
         let rectOnScreen = window.convertToScreen(rectInWindow)
         onFrameChange(rectOnScreen)
+    }
+}
+
+private struct ScrollViewScrollerVisibilityConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            configureScrollView(containing: view, remainingRetries: 4)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configureScrollView(containing: nsView, remainingRetries: 4)
+        }
+    }
+
+    private func configureScrollView(containing view: NSView, remainingRetries: Int) {
+        guard let scrollView = nearestScrollView(from: view) else {
+            guard remainingRetries > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                configureScrollView(containing: view, remainingRetries: remainingRetries - 1)
+            }
+            return
+        }
+
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+    }
+
+    private func nearestScrollView(from view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView {
+            return scrollView
+        }
+
+        if let scrollView = view.enclosingScrollView {
+            return scrollView
+        }
+
+        var currentView = view.superview
+        while let candidate = currentView {
+            if let scrollView = candidate as? NSScrollView {
+                return scrollView
+            }
+            currentView = candidate.superview
+        }
+
+        return nil
     }
 }
 

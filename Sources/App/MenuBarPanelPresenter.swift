@@ -23,6 +23,9 @@ final class MenuBarPanelPresenter: NSObject {
 
     private let pluginHost: PluginHost
     private let onDismiss: () -> Void
+    private let onOpenSettings: () -> Void
+    private let onPresentDiskCleanConfiguration: () -> Void
+    private let onPresentLaunchControlConfiguration: () -> Void
     private let onAllPanelsClosed: () -> Void
 
     private let featurePopover = NSPopover()
@@ -41,11 +44,15 @@ final class MenuBarPanelPresenter: NSObject {
     ) {
         self.pluginHost = pluginHost
         self.onDismiss = onDismiss
+        self.onOpenSettings = onOpenSettings
+        self.onPresentDiskCleanConfiguration = onPresentDiskCleanConfiguration
+        self.onPresentLaunchControlConfiguration = onPresentLaunchControlConfiguration
         self.onAllPanelsClosed = onAllPanelsClosed
 
         self.featureHostingController = NSHostingController(
             rootView: MenuBarContent(
                 pluginHost: pluginHost,
+                panelHeight: MenuBarPanelLayout.preferredPanelHeight(for: pluginHost.panelItems, screen: nil),
                 onDismiss: onDismiss,
                 onOpenSettings: onOpenSettings,
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
@@ -90,7 +97,23 @@ final class MenuBarPanelPresenter: NSObject {
 
         componentPopover.performClose(nil)
         pluginHost.refreshAll()
-        featurePopover.contentSize = MenuBarPanelLayout.contentSize(for: pluginHost.panelItems)
+        let panelHeight = MenuBarPanelLayout.preferredPanelHeight(
+            for: pluginHost.panelItems,
+            screen: button.window?.screen ?? NSScreen.main
+        )
+        featureHostingController.rootView = MenuBarContent(
+            pluginHost: pluginHost,
+            panelHeight: panelHeight,
+            onDismiss: onDismiss,
+            onOpenSettings: onOpenSettings,
+            onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
+            onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
+        )
+        applyCurrentAppearance()
+        featurePopover.contentSize = NSSize(
+            width: MenuBarPanelLayout.width(for: pluginHost.panelItems),
+            height: panelHeight
+        )
         show(featurePopover, relativeTo: button)
     }
 
@@ -144,7 +167,13 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func prewarm() {
-        featurePopover.contentSize = MenuBarPanelLayout.contentSize(for: pluginHost.panelItems)
+        featurePopover.contentSize = NSSize(
+            width: MenuBarPanelLayout.width(for: pluginHost.panelItems),
+            height: MenuBarPanelLayout.preferredPanelHeight(
+                for: pluginHost.panelItems,
+                screen: NSScreen.main
+            )
+        )
         componentPopover.contentSize = NSSize(
             width: ComponentPanelLayout.panelWidth,
             height: ComponentPanelLayout.preferredPanelHeight(
