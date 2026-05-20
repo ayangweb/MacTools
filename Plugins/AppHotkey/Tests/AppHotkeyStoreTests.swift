@@ -233,9 +233,11 @@ final class AppShortcutEntryTests: XCTestCase {
 @MainActor
 final class AppHotkeyPluginTests: XCTestCase {
 
-    private func makePlugin(
-        storage: InMemoryPluginStorage = InMemoryPluginStorage()
-    ) -> AppHotkeyPlugin {
+    private func makePlugin() -> AppHotkeyPlugin {
+        makePlugin(storage: InMemoryPluginStorage())
+    }
+
+    private func makePlugin(storage: InMemoryPluginStorage) -> AppHotkeyPlugin {
         let context = PluginRuntimeContext(pluginID: "app-launcher", storage: storage)
         return AppHotkeyPlugin(context: context)
     }
