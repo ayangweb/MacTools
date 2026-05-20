@@ -128,7 +128,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: "管理风扇转速预设，支持自定义名称和转速") { [self] _ in
+        PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
             FanControlPresetManagerView(
                 presetStore: self.presetStore,
                 fanSnapshot: self.fanSnapshot

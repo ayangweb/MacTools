@@ -141,7 +141,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
     }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: "用指定数量的手指在触控板上轻点，将模拟鼠标中键点击") { [weak self] _ in
+        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
             guard let self = self else { return AnyView(EmptyView()) }
             let currentCount = self.storage.integer(forKey: StorageKey.requiredFingerCount)
             let displayCount = currentCount > 0 ? currentCount : self.requiredFingerCount
