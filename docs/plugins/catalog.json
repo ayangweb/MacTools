@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-20T07:06:05Z",
+  "generatedAt": "2026-05-20T08:46:02Z",
   "minimumHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "plugins": [
@@ -177,15 +177,15 @@
       "id": "eject-disk",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "9dc5c0ac9f593b2a9f88f42a747ba1b26215d3f72c21a27325f32e71488b9119",
-        "size": 68700,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/eject-disk.mactoolsplugin.zip"
+        "sha256": "0b04384d330d2aabb5294b6bd43a267f708fef783421fce259481ede741b3c8d",
+        "size": 69056,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/eject-disk.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
       "summary": "推出所有可移动磁盘",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -217,15 +217,15 @@
       "id": "fan-control",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "7efb09b346af540c4e14df6d6c42240d1cc8dc14ab39a1a516453670198367b3",
-        "size": 338078,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.5/fan-control.mactoolsplugin.zip"
+        "sha256": "86e53ca10b5323938fbabfc0755123320f67a076baab2f395003a691b839ca78",
+        "size": 338003,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/fan-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.5",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
       "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -237,15 +237,15 @@
       "id": "fix-damaged-app",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "f45a655f95ecc546fc250f8f23d1e2dd539bad7147b3bdb1d4f2553576a00280",
-        "size": 182102,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/fix-damaged-app.mactoolsplugin.zip"
+        "sha256": "64b7e9ff085120fdd319304ef310e94d9c1a09e748bb7f0a79121998cbf0536f",
+        "size": 182041,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/fix-damaged-app.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
       "summary": "移除隔离属性，解决「已损坏」或「不受信任」提示",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "capabilities": {
@@ -377,17 +377,17 @@
       "id": "middle-click",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "763bb217a26e2918bf2303ac66f9d88adf093d6dd08fae641cb774d9ce2702c5",
-        "size": 104147,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/middle-click.mactoolsplugin.zip"
+        "sha256": "5666f938a2b60b9db35b3d847376be5d6142a29d5b30ee5194ef9fda59018fb2",
+        "size": 104181,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/middle-click.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
       "summary": "触控板轻点模拟鼠标中键",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -456,6 +456,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "xhms43sxBdlUdiFJFncXOz3tiK6yIoHt3/PAuz08tWxzbD9s8iJFAsRLPbksHojtLkTpOuRjorLIVinlNhBYDA=="
+    "value": "jH46E5NVFufiW6QLl1OtEJJM2BzZiNLtqPzvBQE1ZZ3qRelBkcAHAyYEK94Bd59S66G3tJYrxaNjYOlrlggvAg=="
   }
 }
