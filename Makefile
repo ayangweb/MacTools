@@ -17,6 +17,8 @@ PLUGIN_PROJECT_SOURCE_DIR ?= Plugins
 GENERATED_PLUGIN_PROJECT_CONFIG := Configs/GeneratedPlugins.yml
 LOCAL_PLUGIN_BUILD_DIR ?= build/LocalPlugins
 LOCAL_PLUGIN_CATALOG := $(LOCAL_PLUGIN_BUILD_DIR)/catalog.dev.json
+LOCAL_ICON_GALLERY_DIR ?= build/LocalIconGallery
+LOCAL_ICON_GALLERY_CATALOG := $(LOCAL_ICON_GALLERY_DIR)/catalog.dev.json
 PLUGIN_RELEASE_REPO ?= ggbond268/MacTools
 PLUGIN_RELEASE_TAG ?= plugins-local
 PLUGIN_RELEASE_BUILD_DIR ?= build/PluginRelease/Build
@@ -26,7 +28,7 @@ PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
 PLUGIN_RELEASE_SIGNED_CATALOG ?= docs/plugins/catalog.json
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
-.PHONY: setup generate-plugin-config generate build build-plugin build-plugins package-plugins-release run run-open clean release-local
+.PHONY: setup generate-plugin-config generate build build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -63,6 +65,10 @@ build-plugin: generate
 
 build-plugins: build-plugin
 
+generate-icon-gallery:
+	@./scripts/icons/generate-local-icon-gallery.py \
+		--output-dir "$(LOCAL_ICON_GALLERY_DIR)"
+
 package-plugins-release: generate
 	@./scripts/plugins/build-plugin-release-assets.sh \
 		--source-dir "$(LOCAL_PLUGIN_SOURCE_DIR)" \
@@ -77,14 +83,27 @@ package-plugins-release: generate
 		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
-run: build
+run: build generate-icon-gallery
 	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \
+	ICON_CATALOG_URL="$(MACTOOLS_ICON_CATALOG_URL)"; \
 	if [ -z "$$CATALOG_URL" ] && [ -f "$(LOCAL_PLUGIN_CATALOG)" ]; then \
 		CATALOG_URL="file://$(abspath $(LOCAL_PLUGIN_CATALOG))"; \
 	fi; \
+	if [ -z "$$ICON_CATALOG_URL" ] && [ -f "$(LOCAL_ICON_GALLERY_CATALOG)" ]; then \
+		ICON_CATALOG_URL="file://$(abspath $(LOCAL_ICON_GALLERY_CATALOG))"; \
+	fi; \
 	if [ -n "$$CATALOG_URL" ]; then \
 		echo "Using plugin catalog: $$CATALOG_URL"; \
+	fi; \
+	if [ -n "$$ICON_CATALOG_URL" ]; then \
+		echo "Using icon catalog: $$ICON_CATALOG_URL"; \
+	fi; \
+	if [ -n "$$CATALOG_URL" ] && [ -n "$$ICON_CATALOG_URL" ]; then \
+		MACTOOLS_PLUGIN_CATALOG_URL="$$CATALOG_URL" MACTOOLS_ICON_CATALOG_URL="$$ICON_CATALOG_URL" "$(APP_EXECUTABLE)"; \
+	elif [ -n "$$CATALOG_URL" ]; then \
 		MACTOOLS_PLUGIN_CATALOG_URL="$$CATALOG_URL" "$(APP_EXECUTABLE)"; \
+	elif [ -n "$$ICON_CATALOG_URL" ]; then \
+		MACTOOLS_ICON_CATALOG_URL="$$ICON_CATALOG_URL" "$(APP_EXECUTABLE)"; \
 	else \
 		echo "No local plugin catalog found. Run 'make build-plugin' or set MACTOOLS_PLUGIN_CATALOG_URL."; \
 		"$(APP_EXECUTABLE)"; \

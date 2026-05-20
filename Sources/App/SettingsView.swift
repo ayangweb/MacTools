@@ -1,15 +1,26 @@
 import SwiftUI
 import MacToolsPluginKit
 
+enum GeneralSettingsCardLayout {
+    static let horizontalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 4
+    static let iconSize: CGFloat = 30
+    static let iconCornerRadius: CGFloat = 8
+    static let headerSpacing: CGFloat = 16
+    static let minRowHeight: CGFloat = 38
+}
+
 struct SettingsView: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
+    @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
 
     var body: some View {
         TabView(selection: $pluginHost.selectedSettingsDestination) {
             GeneralSettingsView(
-                menuBarIconSettings: menuBarIconSettings
+                menuBarIconSettings: menuBarIconSettings,
+                menuBarIconGallery: menuBarIconGallery
             )
                 .tag(SettingsDestination.general)
                 .tabItem {
@@ -77,6 +88,7 @@ private struct PermissionSettingsRow: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
+    @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
 
     var body: some View {
@@ -88,7 +100,10 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                MenuBarIconSettingsView(iconSettings: menuBarIconSettings)
+                MenuBarIconSettingsView(
+                    iconSettings: menuBarIconSettings,
+                    gallery: menuBarIconGallery
+                )
             } header: {
                 Text("状态栏图标")
             }
@@ -110,16 +125,16 @@ private struct AppearanceSettingsRow: View {
     @Binding var selection: AppAppearancePreference
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
                     .fill(Color.accentColor.opacity(0.12))
 
                 Image(systemName: "circle.lefthalf.filled")
                     .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(Color.accentColor)
             }
-            .frame(width: 30, height: 30)
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("应用外观")
@@ -140,11 +155,10 @@ private struct AppearanceSettingsRow: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 220)
         }
-        .frame(minHeight: 38)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help("设置应用外观")
     }
 }

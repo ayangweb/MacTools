@@ -17,6 +17,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
     private let pluginHost = PluginHost()
     private let appUpdater = AppUpdater()
     private let menuBarIconSettings = MenuBarIconSettings()
+    private let menuBarIconGallery = MenuBarIconGalleryLibrary()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
 
@@ -26,7 +27,8 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
         let windowRouter = AppWindowRouter(
             pluginHost: pluginHost,
             appUpdater: appUpdater,
-            menuBarIconSettings: menuBarIconSettings
+            menuBarIconSettings: menuBarIconSettings,
+            menuBarIconGallery: menuBarIconGallery
         )
         self.windowRouter = windowRouter
         statusItemController = MenuBarStatusItemController(
