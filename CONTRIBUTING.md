@@ -21,7 +21,7 @@
 - `Plugins/<PluginName>/`：插件 manifest、源码、bundle 入口、资源和相邻测试。
 - `Tests/`：App/Core 共享逻辑的 XCTest；插件测试优先放在对应插件目录下。
 - `project.yml`：XcodeGen 根项目源文件，只维护 App、PluginKit 和公共聚合入口；插件 target 由生成器自动生成。
-- `Plugins/<PluginName>/project.yml`：可选的插件构建差异配置，仅在插件需要额外 framework、include path、bundle 资源或 target 覆盖时添加。
+- `Plugins/<PluginName>/project.yml`：可选的插件构建差异配置，仅在插件需要额外 framework、include path、bundle 资源、helper/tool target 或 target 覆盖时添加。
 - `docs/plugins/`：插件包、catalog、本地调试和发布流程说明。
 - `docs/superpowers/`：较大的产品、交互或实施设计文档。
 
@@ -36,7 +36,7 @@
 - 自定义插件设置视图必须复用 `MacToolsPluginKit.PluginSettingsTheme` 和 `.pluginSettingsCardBackground(...)`，不要复制插件私有 settings style，也不要让插件依赖 `Sources/App/SettingsStyle.swift`。
 - 插件状态变化后调用 `onStateChange?()`；耗时扫描、文件系统和系统调用不要长时间阻塞主线程。
 - 用户可见文案以中文为主，保持简洁、清楚、接近 macOS 原生表达。
-- 优先复用 Apple 原生框架；新增系统 framework 或私有 include path 时，在插件自己的 `project.yml` 中声明最小差异。
+- 优先复用 Apple 原生框架；新增系统 framework、私有 include path、bundle 内辅助可执行文件时，在插件自己的 `project.yml` 中声明最小差异。需要单独签名的 bundle 资源可执行文件应写入 `plugin.json.package.signPaths`。
 
 ## 测试
 - 行为改动应补充或更新相邻 XCTest，测试文件命名使用 `<TypeName>Tests.swift`。
